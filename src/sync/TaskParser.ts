@@ -68,30 +68,33 @@ const PROJECT_OVERRIDE_REGEX = /@project:([^@<📅🛫⏳🔺⏫🔼🔽⏬➕�
 const PRIORITY_EMOJIS = Object.keys(PRIORITY_MAP);
 
 // ─── Strip-only patterns (tokens we don't map to Vikunja) ────────────────────
+// CRITICAL: All emoji regex patterns MUST use the 'u' (unicode) flag.
+// Without it, JavaScript regex treats multi-byte UTF-8 emoji as individual bytes,
+// which can corrupt them into replacement characters (◆) during matching and replacement.
 
 /** `📅 / 🛫 / ⏳` + date — handled separately but listed here for reference */
-const DATE_STRIP_REGEX = /[📅🛫⏳]\s*\d{4}-\d{2}-\d{2}/g;
+const DATE_STRIP_REGEX = /[📅🛫⏳]\s*\d{4}-\d{2}-\d{2}/gu;
 
 /** `🔁 every ...` — full recurrence token */
-const RECURRENCE_STRIP_REGEX = /🔁\s*[^🔺⏫🔼🔽⏬📅🛫⏳➕✅❌🆔⛔🏁@<]*/g;
+const RECURRENCE_STRIP_REGEX = /🔁\s*[^🔺⏫🔼🔽⏬📅🛫⏳➕✅❌🆔⛔🏁@<]*/gu;
 
 /** `➕ YYYY-MM-DD` — created date (Tasks plugin) */
-const CREATED_DATE_STRIP_REGEX = /➕\s*\d{4}-\d{2}-\d{2}/g;
+const CREATED_DATE_STRIP_REGEX = /➕\s*\d{4}-\d{2}-\d{2}/gu;
 
 /** `✅ YYYY-MM-DD` — completion date (Tasks plugin) */
-const DONE_DATE_STRIP_REGEX = /✅\s*\d{4}-\d{2}-\d{2}/g;
+const DONE_DATE_STRIP_REGEX = /✅\s*\d{4}-\d{2}-\d{2}/gu;
 
 /** `❌ YYYY-MM-DD` — cancelled date (Tasks plugin) */
-const CANCELLED_DATE_STRIP_REGEX = /❌\s*\d{4}-\d{2}-\d{2}/g;
+const CANCELLED_DATE_STRIP_REGEX = /❌\s*\d{4}-\d{2}-\d{2}/gu;
 
 /** `🆔 <word>` — Tasks plugin internal task ID */
-const TASK_ID_STRIP_REGEX = /🆔\s*\S*/g;
+const TASK_ID_STRIP_REGEX = /🆔\s*\S*/gu;
 
 /** `⛔ <word>` — blocked-by dependency (Tasks plugin) */
-const BLOCKED_BY_STRIP_REGEX = /⛔\s*\S*/g;
+const BLOCKED_BY_STRIP_REGEX = /⛔\s*\S*/gu;
 
 /** `🏁 <word>` — on-completion action (Tasks plugin) */
-const FINISH_ON_STRIP_REGEX = /🏁\s*\S*/g;
+const FINISH_ON_STRIP_REGEX = /🏁\s*\S*/gu;
 
 // ─── Parser ───────────────────────────────────────────────────────────────────
 
@@ -183,7 +186,12 @@ export class TaskParser {
     t = t.replace(DATE_STRIP_REGEX, "");
     t = t.replace(RECURRENCE_STRIP_REGEX, "");
     t = t.replace(PROJECT_OVERRIDE_REGEX, "");
-    for (const emoji of PRIORITY_EMOJIS) t = t.replace(emoji, "");
+    // CRITICAL: Use replaceAll instead of replace for emoji to handle multiple occurrences
+    // If a title has multiple emoji (e.g. both priority and date), .replace() only removes
+    // the first one, leaving others behind as replacement characters (◆).
+    for (const emoji of PRIORITY_EMOJIS) {
+      t = t.replaceAll(emoji, "");
+    }
 
     // Tasks plugin tokens (strip-only — not mapped to Vikunja)
     t = t.replace(CREATED_DATE_STRIP_REGEX, "");

@@ -3,20 +3,27 @@
  * @description Parses Obsidian markdown task syntax into structured ObsidianTask objects,
  * and serialises them back to markdown.
  *
- * Supported syntax:
- *   - [ ] Task title                        → incomplete task
- *   - [x] Task title                        → complete task
- *   - [ ] Task title 📅 2026-04-20          → due date
- *   - [ ] Task title 🛫 2026-04-20          → start date
- *   - [ ] Task title ⏳ 2026-04-20          → scheduled date
- *   - [ ] Task title 🔺                     → highest priority
- *   - [ ] Task title ⏫                     → high priority
- *   - [ ] Task title 🔼                     → medium priority
- *   - [ ] Task title 🔽                     → low priority
- *   - [ ] Task title <!--vikunja:42-->      → synced task with Vikunja ID 42
+ * Supported syntax (own + Obsidian Tasks plugin compatible):
+ *   - [ ] Task title                          → incomplete task
+ *   - [x] Task title                          → complete task
+ *   - [ ] Task title 📅 2026-04-20            → due date
+ *   - [ ] Task title 🛫 2026-04-20            → start date
+ *   - [ ] Task title ⏳ 2026-04-20            → scheduled date
+ *   - [ ] Task title 🔁 every week            → recurrence → Vikunja repeat_after
+ *   - [ ] Task title 🔺                       → highest priority
+ *   - [ ] Task title ⏫                       → high priority
+ *   - [ ] Task title 🔼                       → medium priority
+ *   - [ ] Task title 🔽                       → low priority
+ *   - [ ] Task title @project:Work Tasks      → inline project override
+ *   - [ ] Task title <!--vikunja:42-->        → synced task with Vikunja ID 42
  *
- * This is compatible with the Obsidian Tasks plugin syntax so existing
- * task files will be understood correctly.
+ * Tokens from the Obsidian Tasks plugin that are stripped but not mapped to Vikunja:
+ *   ➕ YYYY-MM-DD   created date
+ *   ✅ YYYY-MM-DD   completion date
+ *   ❌ YYYY-MM-DD   cancelled date
+ *   🆔 <id>         Tasks plugin task ID
+ *   ⛔ <id>         blocked-by dependency
+ *   🏁 <text>       on-completion action
  */
 
 import type { ObsidianTask } from "../types";
@@ -30,58 +37,71 @@ const TASK_LINE_REGEX = /^(\s*)[-*]\s+\[([x ])\]\s+(.+)$/i;
 /** Matches the Vikunja ID comment: `<!--vikunja:42-->` */
 const VIKUNJA_ID_REGEX = /<!--vikunja:(\d+)-->/;
 
-/** Matches due date emoji: `📅 2026-04-20` */
+/** Matches due date: `📅 2026-04-20` */
 const DUE_DATE_REGEX = /📅\s*(\d{4}-\d{2}-\d{2})/;
 
-/** Matches start date emoji: `🛫 2026-04-20` */
+/** Matches start date: `🛫 2026-04-20` */
 const START_DATE_REGEX = /🛫\s*(\d{4}-\d{2}-\d{2})/;
 
-/** Matches scheduled date emoji: `⏳ 2026-04-20` */
+/** Matches scheduled date: `⏳ 2026-04-20` */
 const SCHEDULED_DATE_REGEX = /⏳\s*(\d{4}-\d{2}-\d{2})/;
 
 /**
- * Matches an inline project override: `@project:Work Tasks`
- * The project name runs to the end of the token (stops at whitespace that
- * precedes another metadata marker or end-of-string). Using a greedy match
- * up to the next `@`, emoji, `<!--`, or end-of-string keeps multi-word names
- * working without requiring quotes.
+ * Captures recurrence text after 🔁, stopping at the next metadata emoji.
+ * e.g. `🔁 every week` → captures "every week"
  */
-const PROJECT_OVERRIDE_REGEX = /@project:([^@<📅🛫⏳🔺⏫🔼🔽⏬]+)/;
+const RECURRENCE_EXTRACT_REGEX = /🔁\s*([^🔺⏫🔼🔽⏬📅🛫⏳➕✅❌🆔⛔🏁@<]+)/;
 
-/** All priority emojis — used to strip from title */
+/**
+ * Matches an inline project override: `@project:Work Tasks`
+ * Stops at the next metadata marker so multi-word names work without quotes.
+ */
+const PROJECT_OVERRIDE_REGEX = /@project:([^@<📅🛫⏳🔺⏫🔼🔽⏬➕✅❌🆔⛔🏁]+)/;
+
+/** All priority emojis */
 const PRIORITY_EMOJIS = Object.keys(PRIORITY_MAP);
 
-/** All date emojis and their trailing content — used to strip from title */
+// ─── Strip-only patterns (tokens we don't map to Vikunja) ────────────────────
+
+/** `📅 / 🛫 / ⏳` + date — handled separately but listed here for reference */
 const DATE_STRIP_REGEX = /[📅🛫⏳]\s*\d{4}-\d{2}-\d{2}/g;
+
+/** `🔁 every ...` — full recurrence token */
+const RECURRENCE_STRIP_REGEX = /🔁\s*[^🔺⏫🔼🔽⏬📅🛫⏳➕✅❌🆔⛔🏁@<]*/g;
+
+/** `➕ YYYY-MM-DD` — created date (Tasks plugin) */
+const CREATED_DATE_STRIP_REGEX = /➕\s*\d{4}-\d{2}-\d{2}/g;
+
+/** `✅ YYYY-MM-DD` — completion date (Tasks plugin) */
+const DONE_DATE_STRIP_REGEX = /✅\s*\d{4}-\d{2}-\d{2}/g;
+
+/** `❌ YYYY-MM-DD` — cancelled date (Tasks plugin) */
+const CANCELLED_DATE_STRIP_REGEX = /❌\s*\d{4}-\d{2}-\d{2}/g;
+
+/** `🆔 <word>` — Tasks plugin internal task ID */
+const TASK_ID_STRIP_REGEX = /🆔\s*\S*/g;
+
+/** `⛔ <word>` — blocked-by dependency (Tasks plugin) */
+const BLOCKED_BY_STRIP_REGEX = /⛔\s*\S*/g;
+
+/** `🏁 <word>` — on-completion action (Tasks plugin) */
+const FINISH_ON_STRIP_REGEX = /🏁\s*\S*/g;
 
 // ─── Parser ───────────────────────────────────────────────────────────────────
 
 export class TaskParser {
   /**
    * Parse all task lines from a markdown file's content.
-   *
-   * @param content  - Full file content
-   * @param filePath - Vault-relative path to the file
-   * @returns Array of parsed ObsidianTask objects
    */
   static parseFile(content: string, filePath: string): ObsidianTask[] {
-    const lines = content.split("\n");
-    const tasks: ObsidianTask[] = [];
-
-    for (let i = 0; i < lines.length; i++) {
-      const task = TaskParser.parseLine(lines[i], i, filePath);
-      if (task) tasks.push(task);
-    }
-
-    return tasks;
+    return content
+      .split("\n")
+      .map((line, i) => TaskParser.parseLine(line, i, filePath))
+      .filter((t): t is ObsidianTask => t !== null);
   }
 
   /**
-   * Parse a single line into an ObsidianTask, or return null if it's not a task.
-   *
-   * @param line       - Raw markdown line
-   * @param lineNumber - 0-indexed line number in the file
-   * @param filePath   - Vault-relative path to the file
+   * Parse a single line into an ObsidianTask, or return null if not a task.
    */
   static parseLine(
     line: string,
@@ -94,16 +114,16 @@ export class TaskParser {
     const [, , checkmark, rawContent] = match;
     const done = checkmark.toLowerCase() === "x";
 
-    // Extract Vikunja ID if present
+    // Vikunja tracking ID
     const vikunjaMatch = rawContent.match(VIKUNJA_ID_REGEX);
     const vikunjaId = vikunjaMatch ? parseInt(vikunjaMatch[1], 10) : null;
 
-    // Extract dates
+    // Dates
     const dueDateMatch = rawContent.match(DUE_DATE_REGEX);
     const startDateMatch = rawContent.match(START_DATE_REGEX);
     const scheduledDateMatch = rawContent.match(SCHEDULED_DATE_REGEX);
 
-    // Extract priority
+    // Priority
     let priority = 0;
     for (const [emoji, value] of Object.entries(PRIORITY_MAP)) {
       if (rawContent.includes(emoji)) {
@@ -112,11 +132,14 @@ export class TaskParser {
       }
     }
 
-    // Extract inline project override: @project:Name
+    // Recurrence (`🔁 every week` etc.)
+    const recurrenceMatch = rawContent.match(RECURRENCE_EXTRACT_REGEX);
+    const recurrence = recurrenceMatch ? recurrenceMatch[1].trim() : null;
+
+    // Inline project override (`@project:Name`)
     const projectMatch = rawContent.match(PROJECT_OVERRIDE_REGEX);
     const projectName = projectMatch ? projectMatch[1].trim() : null;
 
-    // Clean title: strip all metadata markers including @project:
     const title = TaskParser.cleanTitle(rawContent);
 
     return {
@@ -129,87 +152,78 @@ export class TaskParser {
       startDate: startDateMatch ? startDateMatch[1] : null,
       scheduledDate: scheduledDateMatch ? scheduledDateMatch[1] : null,
       priority,
+      recurrence,
       vikunjaId,
-      projectId: null,   // Resolved later from frontmatter, @project:, or default
+      projectId: null,
       projectName,
     };
   }
 
   /**
-   * Strip all metadata from a task title, leaving only the human-readable text.
-   * Removes: date emojis+dates, priority emojis, Vikunja ID comments, extra whitespace.
+   * Strip all metadata tokens from a task title, leaving only human-readable text.
    *
-   * @param raw - Raw task content (after the checkbox)
+   * Strips:
+   * - Our own tokens: dates, priority, @project:, <!--vikunja:-->, 🔁 recurrence
+   * - Obsidian Tasks plugin tokens: ➕ ✅ ❌ 🆔 ⛔ 🏁
    */
   static cleanTitle(raw: string): string {
-    let title = raw;
+    let t = raw;
 
-    // Remove Vikunja ID comment
-    title = title.replace(VIKUNJA_ID_REGEX, "");
+    // Our own tokens
+    t = t.replace(VIKUNJA_ID_REGEX, "");
+    t = t.replace(DATE_STRIP_REGEX, "");
+    t = t.replace(RECURRENCE_STRIP_REGEX, "");
+    t = t.replace(PROJECT_OVERRIDE_REGEX, "");
+    for (const emoji of PRIORITY_EMOJIS) t = t.replace(emoji, "");
 
-    // Remove date emoji + date pairs
-    title = title.replace(DATE_STRIP_REGEX, "");
+    // Tasks plugin tokens (strip-only — not mapped to Vikunja)
+    t = t.replace(CREATED_DATE_STRIP_REGEX, "");
+    t = t.replace(DONE_DATE_STRIP_REGEX, "");
+    t = t.replace(CANCELLED_DATE_STRIP_REGEX, "");
+    t = t.replace(TASK_ID_STRIP_REGEX, "");
+    t = t.replace(BLOCKED_BY_STRIP_REGEX, "");
+    t = t.replace(FINISH_ON_STRIP_REGEX, "");
 
-    // Remove priority emojis
-    for (const emoji of PRIORITY_EMOJIS) {
-      title = title.replace(emoji, "");
-    }
-
-    // Remove inline project override token
-    title = title.replace(PROJECT_OVERRIDE_REGEX, "");
-
-    // Normalise whitespace
-    return title.trim().replace(/\s+/g, " ");
+    return t.trim().replace(/\s+/g, " ");
   }
 
   // ─── Serialisation ──────────────────────────────────────────────────────────
 
   /**
    * Serialise an ObsidianTask back to a markdown line.
-   * Preserves the original indentation from rawLine if available.
-   *
-   * @param task - The task to serialise
+   * Preserves the original indentation from rawLine.
    */
   static serialise(task: ObsidianTask): string {
-    // Preserve original indentation
     const indentMatch = task.rawLine.match(/^(\s*)/);
     const indent = indentMatch ? indentMatch[1] : "";
 
     const checkmark = task.done ? "x" : " ";
     let line = `${indent}- [${checkmark}] ${task.title}`;
 
-    // Append inline project override so it survives round-trips.
-    // Once the task has a vikunjaId the token is no longer needed for
-    // routing, but we keep it so the user's intent remains visible.
-    if (task.projectName) {
-      line += ` @project:${task.projectName}`;
-    }
+    // Inline project override — kept so routing survives round-trips
+    if (task.projectName) line += ` @project:${task.projectName}`;
 
-    // Append priority emoji
+    // Recurrence
+    if (task.recurrence) line += ` 🔁 ${task.recurrence}`;
+
+    // Priority
     if (task.priority > 0 && PRIORITY_MAP_REVERSE[task.priority]) {
       line += ` ${PRIORITY_MAP_REVERSE[task.priority]}`;
     }
 
-    // Append date metadata
-    if (task.startDate) line += ` 🛫 ${task.startDate}`;
+    // Dates
+    if (task.startDate)     line += ` 🛫 ${task.startDate}`;
     if (task.scheduledDate) line += ` ⏳ ${task.scheduledDate}`;
-    if (task.dueDate) line += ` 📅 ${task.dueDate}`;
+    if (task.dueDate)       line += ` 📅 ${task.dueDate}`;
 
-    // Append Vikunja ID as hidden comment — this is how we track which
-    // Obsidian task corresponds to which Vikunja task across syncs
-    if (task.vikunjaId !== null) {
-      line += ` <!--vikunja:${task.vikunjaId}-->`;
-    }
+    // Vikunja tracking ID
+    if (task.vikunjaId !== null) line += ` <!--vikunja:${task.vikunjaId}-->`;
 
     return line;
   }
 
   /**
-   * Update a specific line in a file's content with a new task serialisation.
-   *
-   * @param content    - Full file content
-   * @param lineNumber - Line to replace (0-indexed)
-   * @param newLine    - Replacement line
+   * Replace a specific line in file content with a new task serialisation.
    */
   static replaceLine(content: string, lineNumber: number, newLine: string): string {
     const lines = content.split("\n");
@@ -217,11 +231,71 @@ export class TaskParser {
     return lines.join("\n");
   }
 
-  /**
-   * Check whether a line looks like a task (quick check without full parse).
-   * Used as a fast pre-filter before full parsing.
-   */
+  /** Quick check — does this line look like a task? */
   static isTaskLine(line: string): boolean {
     return TASK_LINE_REGEX.test(line);
+  }
+
+  // ─── Recurrence helpers ─────────────────────────────────────────────────────
+
+  /**
+   * Convert a recurrence string (e.g. "every week") to seconds for Vikunja's
+   * `repeat_after` field. Returns undefined if the pattern is not recognised.
+   *
+   * Supports:
+   *   every day / daily
+   *   every week / weekly
+   *   every month / monthly
+   *   every year / yearly
+   *   every other day
+   *   every N days / weeks / months / years
+   */
+  static parseRepeatAfter(recurrence: string | null): number | undefined {
+    if (!recurrence) return undefined;
+    const r = recurrence.toLowerCase().trim();
+
+    const SECOND = 1;
+    const DAY    = 86_400 * SECOND;
+    const WEEK   = 7  * DAY;
+    const MONTH  = 30 * DAY;
+    const YEAR   = 365 * DAY;
+
+    if (r === "every day"   || r === "daily")   return DAY;
+    if (r === "every week"  || r === "weekly")  return WEEK;
+    if (r === "every month" || r === "monthly") return MONTH;
+    if (r === "every year"  || r === "yearly")  return YEAR;
+    if (r === "every other day")                return 2 * DAY;
+
+    const m = r.match(/^every (\d+) (day|week|month|year)s?$/);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      const units: Record<string, number> = { day: DAY, week: WEEK, month: MONTH, year: YEAR };
+      return n * units[m[2]];
+    }
+
+    return undefined; // Pattern not recognised — we'll skip repeat_after
+  }
+
+  /**
+   * Convert Vikunja's `repeat_after` (seconds) back to a human-readable
+   * recurrence string for display in Obsidian.
+   * Returns null when repeat_after is 0 (no recurrence).
+   */
+  static formatRepeatAfter(seconds: number): string | null {
+    if (!seconds || seconds <= 0) return null;
+
+    const DAY   = 86_400;
+    const WEEK  = 7  * DAY;
+    const MONTH = 30 * DAY;
+    const YEAR  = 365 * DAY;
+
+    if (seconds % YEAR  === 0) return seconds === YEAR  ? "every year"  : `every ${seconds / YEAR} years`;
+    if (seconds % MONTH === 0) return seconds === MONTH ? "every month" : `every ${seconds / MONTH} months`;
+    if (seconds % WEEK  === 0) return seconds === WEEK  ? "every week"  : `every ${seconds / WEEK} weeks`;
+    if (seconds % DAY   === 0) return seconds === DAY   ? "every day"   : `every ${seconds / DAY} days`;
+
+    // Fall back to days (rounded) for irregular values
+    const days = Math.round(seconds / DAY);
+    return days === 1 ? "every day" : `every ${days} days`;
   }
 }

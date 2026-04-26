@@ -38,9 +38,39 @@ Add a priority emoji anywhere in the task line:
 
 Tasks without a priority emoji are created in Vikunja with priority 0 (no priority).
 
+### Recurrence
+
+Use `🔁` to set a repeating task. The recurrence rule syncs to Vikunja's repeat field:
+
+```markdown
+- [ ] Weekly standup 🔁 every week 📅 2026-04-28
+- [ ] Daily review 🔁 every day
+- [ ] Monthly report 🔁 every month 📅 2026-05-01
+- [ ] Every 2 weeks 🔁 every 2 weeks
+```
+
+Supported patterns: `every day`, `every week`, `every month`, `every year`, `every N days/weeks/months/years`, `every other day`. When Vikunja tasks with a repeat interval are imported into Obsidian, the `🔁` token is written automatically.
+
+### Obsidian Tasks plugin tokens
+
+If you use the Obsidian Tasks plugin alongside Vikunja Sync, its additional tokens are recognised and **stripped from the title** before the task is pushed to Vikunja — so they don't pollute your task titles there:
+
+| Token | Meaning | Handling |
+|---|---|---|
+| `🔁 every week` | Recurrence | ✅ Synced to Vikunja `repeat_after` |
+| `🛫 YYYY-MM-DD` | Start date | ✅ Synced to Vikunja `start_date` |
+| `📅 YYYY-MM-DD` | Due date | ✅ Synced to Vikunja `due_date` |
+| `⏳ YYYY-MM-DD` | Scheduled date | ⚠️ Kept in Obsidian only |
+| `➕ YYYY-MM-DD` | Created date | Stripped — Vikunja tracks this automatically |
+| `✅ YYYY-MM-DD` | Completion date | Stripped — done state synced via checkbox |
+| `❌ YYYY-MM-DD` | Cancelled date | Stripped |
+| `🆔 <id>` | Tasks plugin ID | Stripped |
+| `⛔ <id>` | Blocked-by | Stripped — dependencies coming in v0.4 |
+| `🏁 <text>` | On-completion action | Stripped |
+
 ### Combining metadata
 
-You can combine dates and priorities freely:
+You can combine dates, priority, and recurrence freely:
 
 ```markdown
 - [ ] File quarterly taxes 📅 2026-04-30 🔺

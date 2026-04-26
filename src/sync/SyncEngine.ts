@@ -356,6 +356,7 @@ export class SyncEngine {
           due_date: task.dueDate ? new Date(task.dueDate).toISOString() : undefined,
           start_date: task.startDate ? new Date(task.startDate).toISOString() : undefined,
           priority: task.priority > 0 ? task.priority : undefined,
+          repeat_after: TaskParser.parseRepeatAfter(task.recurrence),
         });
 
         // Write vikunjaId back to the file
@@ -381,7 +382,9 @@ export class SyncEngine {
           title: task.title,
           done: task.done,
           due_date: task.dueDate ? new Date(task.dueDate).toISOString() : undefined,
+          start_date: task.startDate ? new Date(task.startDate).toISOString() : undefined,
           priority: task.priority > 0 ? task.priority : undefined,
+          repeat_after: TaskParser.parseRepeatAfter(task.recurrence),
         });
         result.updated++;
       } catch (err) {
@@ -573,8 +576,10 @@ export class SyncEngine {
         startDate: SyncEngine.formatDate(remote.start_date),
         scheduledDate: null, // Vikunja has no scheduled-date concept
         priority: remote.priority,
+        recurrence: TaskParser.formatRepeatAfter(remote.repeat_after),
         vikunjaId: remote.id,
         projectId: remote.project_id,
+        projectName: null,
       };
       return TaskParser.serialise(task);
     });

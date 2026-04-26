@@ -64,6 +64,8 @@ export interface CreateTaskPayload {
   end_date?: string;
   priority?: number;
   project_id?: number;
+  /** Repeat interval in seconds. 0 = no recurrence. */
+  repeat_after?: number;
 }
 
 /** Payload for updating an existing task */
@@ -76,6 +78,8 @@ export interface UpdateTaskPayload {
   end_date?: string;
   priority?: number;
   labels?: VikunjaLabel[];
+  /** Repeat interval in seconds. 0 = no recurrence. */
+  repeat_after?: number;
 }
 
 // ─── Plugin Internal Types ────────────────────────────────────────────────────
@@ -113,6 +117,12 @@ export interface ObsidianTask {
    * Stripped from the task title before pushing to Vikunja.
    */
   projectName: string | null;
+  /**
+   * Recurrence rule parsed from `🔁 every week` syntax.
+   * Stored as the human-readable string (e.g. "every week") and converted
+   * to seconds for Vikunja's `repeat_after` field when pushing.
+   */
+  recurrence: string | null;
 }
 
 /** Plugin settings stored in Obsidian's data.json */

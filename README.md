@@ -113,13 +113,13 @@ The `@project:` token is stripped from the task title before syncing to Vikunja.
 
 ### Synced task IDs
 
-Once a task is synced, the plugin adds a hidden HTML comment to track it:
+Once a task is synced, the plugin adds a hidden tracking comment using Obsidian's native `%%` comment syntax:
 
 ```markdown
-- [ ] My task 📅 2026-04-20 <!--vikunja:42-->
+- [ ] My task 📅 2026-04-20 %%vikunja:42%%
 ```
 
-This comment is invisible in reading view and links the Obsidian task to its Vikunja counterpart across future syncs.
+This is invisible in Reading View and Live Preview, and links the Obsidian task to its Vikunja counterpart across future syncs.
 
 ---
 

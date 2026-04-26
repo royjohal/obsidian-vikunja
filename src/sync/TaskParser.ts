@@ -34,8 +34,14 @@ import { PRIORITY_MAP, PRIORITY_MAP_REVERSE } from "../types";
 /** Matches a markdown task line: `- [ ] ...` or `- [x] ...` or `* [ ] ...` */
 const TASK_LINE_REGEX = /^(\s*)[-*]\s+\[([x ])\]\s+(.+)$/i;
 
-/** Matches the Vikunja ID comment: `<!--vikunja:42-->` */
-const VIKUNJA_ID_REGEX = /<!--vikunja:(\d+)-->/;
+/**
+ * Matches the Vikunja tracking ID in both formats:
+ *   %%vikunja:42%%      — new format (Obsidian native comment, hidden in all views)
+ *   <!--vikunja:42-->   — old format (kept for backward compatibility)
+ *
+ * Always write the %% format; read both so existing tasks aren't orphaned.
+ */
+const VIKUNJA_ID_REGEX = /%%vikunja:(\d+)%%|<!--vikunja:(\d+)-->/;
 
 /** Matches due date: `📅 2026-04-20` */
 const DUE_DATE_REGEX = /📅\s*(\d{4}-\d{2}-\d{2})/;
@@ -114,9 +120,11 @@ export class TaskParser {
     const [, , checkmark, rawContent] = match;
     const done = checkmark.toLowerCase() === "x";
 
-    // Vikunja tracking ID
+    // Vikunja tracking ID — group 1 = new %% format, group 2 = old <!-- --> format
     const vikunjaMatch = rawContent.match(VIKUNJA_ID_REGEX);
-    const vikunjaId = vikunjaMatch ? parseInt(vikunjaMatch[1], 10) : null;
+    const vikunjaId = vikunjaMatch
+      ? parseInt(vikunjaMatch[1] ?? vikunjaMatch[2], 10)
+      : null;
 
     // Dates
     const dueDateMatch = rawContent.match(DUE_DATE_REGEX);
@@ -169,8 +177,9 @@ export class TaskParser {
   static cleanTitle(raw: string): string {
     let t = raw;
 
-    // Our own tokens
-    t = t.replace(VIKUNJA_ID_REGEX, "");
+    // Our own tokens — strip both %% and <!-- --> formats
+    t = t.replace(/%%vikunja:\d+%%/g, "");
+    t = t.replace(/<!--vikunja:\d+-->/g, "");
     t = t.replace(DATE_STRIP_REGEX, "");
     t = t.replace(RECURRENCE_STRIP_REGEX, "");
     t = t.replace(PROJECT_OVERRIDE_REGEX, "");
@@ -216,8 +225,8 @@ export class TaskParser {
     if (task.scheduledDate) line += ` ⏳ ${task.scheduledDate}`;
     if (task.dueDate)       line += ` 📅 ${task.dueDate}`;
 
-    // Vikunja tracking ID
-    if (task.vikunjaId !== null) line += ` <!--vikunja:${task.vikunjaId}-->`;
+    // Vikunja tracking ID — %% is Obsidian's native comment syntax, hidden in all rendered views
+    if (task.vikunjaId !== null) line += ` %%vikunja:${task.vikunjaId}%%`;
 
     return line;
   }

@@ -240,8 +240,7 @@ export class SyncEngine {
 
       if (this.app.vault.getAbstractFileByPath(filePath)) continue; // Already exists
 
-      const content =
-        `---\nvikunja_project_id: ${project.id}\n---\n\n# ${project.title}\n\n`;
+      const content = `---\nvikunja_project_id: ${project.id}\n---\n\n`;
 
       try {
         await this.app.vault.create(filePath, content);
@@ -370,21 +369,57 @@ export class SyncEngine {
   }
 
   /**
-   * Update Vikunja for tasks that have a vikunjaId (i.e. already synced).
-   * Currently updates done status — title/date sync is handled in pull.
+   * Push local changes to Vikunja for tasks that already have a vikunjaId.
+   *
+   * Only tasks that differ from their remote state are pushed — this avoids
+   * hammering the API with no-op updates on every sync (which was causing the
+   * "Syncing…" notice to hang when a vault has many synced tasks).
+   *
+   * Remote state is fetched once via getAllTasks and cached in a Map for O(1)
+   * lookup. If the remote fetch fails we skip updates rather than push blindly.
    */
   private async pushTaskUpdates(tasks: ObsidianTask[], result: SyncResult): Promise<void> {
     const existingTasks = tasks.filter((t) => t.vikunjaId !== null);
+    if (existingTasks.length === 0) return;
+
+    // Fetch current remote state so we only push genuine changes
+    let remoteById = new Map<number, VikunjaTask>();
+    try {
+      const allRemote = await this.client.getAllTasks();
+      remoteById = new Map(allRemote.map((t) => [t.id, t]));
+    } catch (err) {
+      result.errors.push(`Could not fetch remote tasks for update comparison: ${String(err)}`);
+      return; // Skip updates rather than push blindly
+    }
 
     for (const task of existingTasks) {
+      const remote = remoteById.get(task.vikunjaId!);
+
+      // If the task no longer exists remotely, skip (it may have been deleted)
+      if (!remote) continue;
+
+      const localRepeatAfter = TaskParser.parseRepeatAfter(task.recurrence) ?? 0;
+      const localDueDate  = task.dueDate  ? new Date(task.dueDate).toISOString()  : null;
+      const localStartDate = task.startDate ? new Date(task.startDate).toISOString() : null;
+
+      const nothingChanged =
+        task.title    === remote.title &&
+        task.done     === remote.done  &&
+        task.priority === remote.priority &&
+        localRepeatAfter === (remote.repeat_after ?? 0) &&
+        (localDueDate  ?? VIKUNJA_NULL_DATE) === (remote.due_date   ?? VIKUNJA_NULL_DATE) &&
+        (localStartDate ?? VIKUNJA_NULL_DATE) === (remote.start_date ?? VIKUNJA_NULL_DATE);
+
+      if (nothingChanged) continue;
+
       try {
         await this.client.updateTask(task.vikunjaId!, {
-          title: task.title,
-          done: task.done,
-          due_date: task.dueDate ? new Date(task.dueDate).toISOString() : undefined,
-          start_date: task.startDate ? new Date(task.startDate).toISOString() : undefined,
-          priority: task.priority > 0 ? task.priority : undefined,
-          repeat_after: TaskParser.parseRepeatAfter(task.recurrence),
+          title:        task.title,
+          done:         task.done,
+          due_date:     localDueDate  ?? undefined,
+          start_date:   localStartDate ?? undefined,
+          priority:     task.priority > 0 ? task.priority : undefined,
+          repeat_after: localRepeatAfter || undefined,
         });
         result.updated++;
       } catch (err) {

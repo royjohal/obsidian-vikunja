@@ -38,6 +38,9 @@ export default class VikunjaPlugin extends Plugin {
   /** Handle for the periodic sync interval so we can clear/restart it */
   private syncIntervalHandle: number | null = null;
 
+  /** Prevents overlapping sync runs — if a sync is already in progress, new ones are skipped */
+  private isSyncing = false;
+
   // ─── Lifecycle ───────────────────────────────────────────────────────────────
 
   async onload(): Promise<void> {
@@ -157,6 +160,12 @@ export default class VikunjaPlugin extends Plugin {
       return;
     }
 
+    if (this.isSyncing) {
+      new Notice("⏳ Vikunja: Sync already in progress.");
+      return;
+    }
+
+    this.isSyncing = true;
     const notice = new Notice("🔄 Vikunja: Syncing…", 0);
 
     try {
@@ -181,6 +190,8 @@ export default class VikunjaPlugin extends Plugin {
     } catch (err) {
       notice.hide();
       new Notice(`❌ Vikunja sync failed: ${String(err)}`, 8000);
+    } finally {
+      this.isSyncing = false;
     }
   }
 

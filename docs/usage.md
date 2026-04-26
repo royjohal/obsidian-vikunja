@@ -82,16 +82,21 @@ You can combine dates, priority, and recurrence freely:
 
 ## Tracking IDs
 
-Once a task has been synced to Vikunja, the plugin writes a hidden HTML comment into the line:
+Once a task has been synced to Vikunja, the plugin writes a hidden comment into the line using Obsidian's native `%%` comment syntax:
 
 ```markdown
-- [ ] My task 📅 2026-04-20 <!--vikunja:42-->
+- [ ] My task 📅 2026-04-20 %%vikunja:42%%
 ```
 
 This comment:
-- Is **invisible in reading view and live preview** — Obsidian renders it as nothing
+- Is **completely invisible in Reading View and Live Preview** — Obsidian treats `%%...%%` as a native comment and hides it
+- Is visible only in Source Mode (where all raw markdown is shown)
 - Is the permanent link between the Obsidian task and its Vikunja counterpart
 - Must not be edited or removed manually — doing so will cause the plugin to create a duplicate task on the next sync
+
+::: info Migrating from an older version
+If your tasks still have the old `<!--vikunja:42-->` format, both formats are recognised during sync. The old format is automatically replaced with `%%vikunja:42%%` the next time each task is written back to the file.
+:::
 
 ---
 

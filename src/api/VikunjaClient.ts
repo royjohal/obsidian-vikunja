@@ -78,10 +78,25 @@ export class VikunjaClient {
    * @param options - Standard RequestInit options
    */
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const response = await fetch(this.url(path), {
-      ...options,
-      headers: { ...this.headers, ...(options.headers as Record<string, string> ?? {}) },
-    });
+    // Abort after 20 s — prevents sync from hanging forever on a slow/unresponsive server
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 20_000);
+
+    let response: Response;
+    try {
+      response = await fetch(this.url(path), {
+        ...options,
+        signal: controller.signal,
+        headers: { ...this.headers, ...(options.headers as Record<string, string> ?? {}) },
+      });
+    } catch (err) {
+      if ((err as Error).name === "AbortError") {
+        throw new VikunjaRequestError(0, null, `Request timed out: ${path}`);
+      }
+      throw err;
+    } finally {
+      window.clearTimeout(timer);
+    }
 
     if (!response.ok) {
       let apiError: VikunjaApiError | null = null;

@@ -3,7 +3,7 @@ import { defineConfig } from "vitepress";
 export default defineConfig({
   title: "Vikunja Sync",
   description: "Two-way sync between Obsidian tasks and Vikunja",
-  base: "/obsidian-vikunja/",
+  base: "/",
 
   head: [["link", { rel: "icon", href: "/obsidian-vikunja/favicon.svg" }]],
 

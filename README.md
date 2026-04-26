@@ -1,5 +1,7 @@
 # Obsidian Vikunja Sync
 
+**[Documentation →](https://obsidian-vikunja.vercel.app)**
+
 A first-class Obsidian plugin for two-way sync between your Obsidian vault and [Vikunja](https://vikunja.io) — the open-source task management platform.
 
 This plugin is designed to **replace the Obsidian Tasks plugin** entirely, using Vikunja as the backend. Your markdown `- [ ]` tasks become Vikunja tasks, giving you:

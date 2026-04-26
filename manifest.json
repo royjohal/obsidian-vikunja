@@ -1,0 +1,11 @@
+{
+  "id": "obsidian-vikunja",
+  "name": "Vikunja Sync",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Two-way sync between Obsidian tasks and Vikunja. Replaces the Tasks plugin with a full Vikunja-backed task management experience including calendar and Gantt views.",
+  "author": "Your Name",
+  "authorUrl": "https://github.com/yourusername/obsidian-vikunja",
+  "fundingUrl": "",
+  "isDesktopOnly": false
+}

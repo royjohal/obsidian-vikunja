@@ -180,20 +180,24 @@ export class VikunjaClient {
 
   /**
    * Fetch all tasks across all projects.
-   * Uses the /tasks/all endpoint for efficiency.
-   * @param page - Page number (1-indexed)
+   * Iterates through each project and fetches its tasks.
+   * More reliable than /tasks/all as it works across all Vikunja versions.
    */
-  async getAllTasks(page = 1): Promise<VikunjaTask[]> {
+  async getAllTasks(): Promise<VikunjaTask[]> {
+    const projects = await this.getProjects();
     const allTasks: VikunjaTask[] = [];
-    let currentPage = page;
 
-    while (true) {
-      const tasks = await this.request<VikunjaTask[]>(
-        `/tasks/all?per_page=50&page=${currentPage}`
-      );
-      allTasks.push(...tasks);
-      if (tasks.length < 50) break;
-      currentPage++;
+    for (const project of projects) {
+      // Skip archived projects
+      if (project.is_archived) continue;
+
+      try {
+        const tasks = await this.getProjectTasks(project.id);
+        allTasks.push(...tasks);
+      } catch (err) {
+        // Skip this project if we can't fetch its tasks
+        console.warn(`Failed to fetch tasks for project ${project.id}:`, err);
+      }
     }
 
     return allTasks;

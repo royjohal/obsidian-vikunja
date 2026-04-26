@@ -105,7 +105,7 @@ export default class VikunjaPlugin extends Plugin {
 
     // Register label autocomplete suggester
     this.registerEditorSuggest(
-      new LabelSuggest(() => this.cachedLabels)
+      new LabelSuggest(this.app, () => this.cachedLabels)
     );
 
     // Start periodic sync

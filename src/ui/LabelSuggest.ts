@@ -10,6 +10,7 @@ import {
   EditorPosition,
   Editor,
   TFile,
+  App,
   type EditorSuggestContext,
   type EditorSuggestTriggerInfo,
 } from "obsidian";
@@ -27,8 +28,8 @@ export class LabelSuggest extends EditorSuggest<LabelSuggestion> {
   /** Callback to get current labels — allows dynamic updates */
   private getLabels: () => VikunjaLabel[];
 
-  constructor(getLabels: () => VikunjaLabel[]) {
-    super(undefined as any); // Obsidian plugin context injected via register method
+  constructor(app: App, getLabels: () => VikunjaLabel[]) {
+    super(app);
     this.getLabels = getLabels;
   }
 

@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Build output
+main.js
+main.js.map
+
+# Docs build output
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+
+# Obsidian
+.obsidian/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI conversation history — local only, never ships
+ai-chat.md

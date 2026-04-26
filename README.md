@@ -26,18 +26,18 @@ This plugin is designed to **replace the Obsidian Tasks plugin** entirely, using
 
 1. Install [BRAT](https://github.com/TfTHacker/obsidian42-brat) from the Obsidian Community Plugins
 2. In BRAT settings, click **Add Beta Plugin**
-3. Enter: `https://github.com/yourusername/obsidian-vikunja`
+3. Enter: `https://github.com/royjohal/obsidian-vikunja`
 
 ### Manual
 
-1. Download `main.js` and `manifest.json` from the [latest release](https://github.com/yourusername/obsidian-vikunja/releases)
+1. Download `main.js` and `manifest.json` from the [latest release](https://github.com/royjohal/obsidian-vikunja/releases)
 2. Copy both files to `<your-vault>/.obsidian/plugins/obsidian-vikunja/`
 3. Enable the plugin in Obsidian Settings → Community Plugins
 
 ### From source
 
 ```bash
-git clone https://github.com/yourusername/obsidian-vikunja
+git clone https://github.com/royjohal/obsidian-vikunja
 cd obsidian-vikunja
 npm install
 npm run build

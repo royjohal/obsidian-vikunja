@@ -758,6 +758,7 @@ export class SyncEngine {
         vikunjaId: remote.id,
         projectId: remote.project_id,
         projectName: null,
+        labels: remote.labels || [],  // NEW: Sync labels from remote task
       };
       return TaskParser.serialise(task);
     });

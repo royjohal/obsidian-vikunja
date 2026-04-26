@@ -177,6 +177,7 @@ Regular paragraph
         vikunjaId: null,
         projectId: null,
         projectName: null,
+        labels: [],
       };
 
       const line = TaskParser.serialise(task);
@@ -198,6 +199,7 @@ Regular paragraph
         vikunjaId: null,
         projectId: null,
         projectName: null,
+        labels: [],
       };
 
       const line = TaskParser.serialise(task);
@@ -219,6 +221,7 @@ Regular paragraph
         vikunjaId: 42,
         projectId: 1,
         projectName: 'Finance',
+        labels: [],
       };
 
       const line = TaskParser.serialise(task);

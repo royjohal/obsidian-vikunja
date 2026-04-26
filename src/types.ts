@@ -123,6 +123,17 @@ export interface ObsidianTask {
    * to seconds for Vikunja's `repeat_after` field when pushing.
    */
   recurrence: string | null;
+  /**
+   * Synced labels from Vikunja, resolved from parsed tag names.
+   * Initially empty when parsing markdown; populated after label resolution in SyncEngine.
+   */
+  labels: VikunjaLabel[];
+  /**
+   * Parsed tag names extracted from markdown (e.g. ["urgent", "bug"]).
+   * These are converted to label IDs by looking up labels in Vikunja.
+   * Tags use Obsidian native syntax: #tagname
+   */
+  tagNames?: string[];
 }
 
 /** Plugin settings stored in Obsidian's data.json */

@@ -34,6 +34,9 @@ import { PRIORITY_MAP, PRIORITY_MAP_REVERSE } from "../types";
 /** Matches a markdown task line: `- [ ] ...` or `- [x] ...` or `* [ ] ...` */
 const TASK_LINE_REGEX = /^(\s*)[-*]\s+\[([x ])\]\s+(.+)$/i;
 
+/** Matches Obsidian native tags: `#tagname` (word chars and hyphens) */
+const TAG_REGEX = /#([\w-]+)/g;
+
 /**
  * Matches the Vikunja tracking ID in both formats:
  *   %%vikunja:42%%      — new format (Obsidian native comment, hidden in all views)
@@ -151,6 +154,10 @@ export class TaskParser {
     const projectMatch = rawContent.match(PROJECT_OVERRIDE_REGEX);
     const projectName = projectMatch ? projectMatch[1].trim() : null;
 
+    // Tags (`#tagname`) — extracted from markdown, resolved to labels in SyncEngine
+    const tagMatches = Array.from(rawContent.matchAll(TAG_REGEX));
+    const tagNames = tagMatches.map(m => m[1]);
+
     const title = TaskParser.cleanTitle(rawContent);
 
     return {
@@ -167,6 +174,8 @@ export class TaskParser {
       vikunjaId,
       projectId: null,
       projectName,
+      labels: [],  // Will be populated by SyncEngine after resolving tag names
+      tagNames: tagNames.length > 0 ? tagNames : undefined,
     };
   }
 
@@ -192,6 +201,9 @@ export class TaskParser {
     for (const emoji of PRIORITY_EMOJIS) {
       t = t.replaceAll(emoji, "");
     }
+
+    // Tags (#tagname) — Obsidian native syntax
+    t = t.replace(TAG_REGEX, "");
 
     // Tasks plugin tokens (strip-only — not mapped to Vikunja)
     t = t.replace(CREATED_DATE_STRIP_REGEX, "");
@@ -232,6 +244,14 @@ export class TaskParser {
     if (task.startDate)     line += ` 🛫 ${task.startDate}`;
     if (task.scheduledDate) line += ` ⏳ ${task.scheduledDate}`;
     if (task.dueDate)       line += ` 📅 ${task.dueDate}`;
+
+    // Labels (Tags) — Convert to #tagname format (sanitized slug format)
+    if (task.labels && task.labels.length > 0) {
+      const tags = task.labels
+        .map(label => `#${TaskParser.sanitizeTagToSlug(label.title)}`)
+        .join(" ");
+      line += ` ${tags}`;
+    }
 
     // Vikunja tracking ID — %% is Obsidian's native comment syntax, hidden in all rendered views
     if (task.vikunjaId !== null) line += ` %%vikunja:${task.vikunjaId}%%`;
@@ -314,5 +334,45 @@ export class TaskParser {
     // Fall back to days (rounded) for irregular values
     const days = Math.round(seconds / DAY);
     return days === 1 ? "every day" : `every ${days} days`;
+  }
+
+  // ─── Label/Tag Helpers ────────────────────────────────────────────────────────
+
+  /**
+   * Convert a label title to a sanitized slug format for use as a tag.
+   * Example: "My Important Label" → "my-important-label"
+   * This ensures tags are always valid markdown and consistent.
+   */
+  static sanitizeTagToSlug(label: string): string {
+    return label
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, '-')        // Replace spaces with dashes
+      .replace(/[^\w-]/g, '');      // Remove non-word chars except dashes
+  }
+
+  /**
+   * Convert a slug back to a label title.
+   * Example: "my-important-label" → "My Important Label"
+   * Used when creating new labels from parsed tags.
+   */
+  static slugToLabel(slug: string): string {
+    return slug
+      .split('-')
+      .map(word => word.length > 0 ? word.charAt(0).toUpperCase() + word.slice(1) : '')
+      .join(' ')
+      .trim();
+  }
+
+  /**
+   * Generate a random hex color for new labels.
+   * Returns one of a curated set of colors to keep them visually consistent.
+   */
+  static generateRandomColor(): string {
+    const colors = [
+      '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
+      '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B88B', '#ABEBC6',
+    ];
+    return colors[Math.floor(Math.random() * colors.length)];
   }
 }

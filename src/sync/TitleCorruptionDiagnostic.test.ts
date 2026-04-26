@@ -69,6 +69,7 @@ describe('Title Corruption Diagnostic', () => {
         vikunjaId: 42,
         projectId: 1,
         projectName: 'Work',
+        labels: [],
       };
 
       // Serialize to markdown

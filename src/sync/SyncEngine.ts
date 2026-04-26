@@ -88,15 +88,22 @@ export class SyncEngine {
         if (!fileProjectMap.has(path)) fileProjectMap.set(path, id);
       }
 
-      // Step 3: Push new Obsidian tasks (no vikunjaId) to Vikunja
+      // Step 3: Pull remote changes from Vikunja first.
+      // This ensures Vikunja's state is reflected in Obsidian before we push.
+      // Critical for conflict resolution: if a task was marked done in Vikunja
+      // but is still pending in Obsidian, we pull the done state first so it's
+      // reflected in both systems. If we pushed before pulling, we'd revert
+      // Vikunja's change back to pending, losing the user's work in Vikunja.
+      // See: https://github.com/royjohal/obsidian-vikunja/issues/X
+      await this.pullRemoteChanges(obsidianTasks, fileProjectMap, result);
+
+      // Step 4: Push new Obsidian tasks (no vikunjaId) to Vikunja
       await this.pushNewTasks(obsidianTasks, result);
 
-      // Step 4: Push updates to existing tasks (have vikunjaId, content changed)
+      // Step 5: Push updates to existing tasks (have vikunjaId, content changed)
+      // At this point, Obsidian reflects Vikunja's current state, so we only
+      // push genuine local changes, not reverts of remote changes.
       await this.pushTaskUpdates(obsidianTasks, result);
-
-      // Step 5: Pull remote changes from Vikunja back to the vault,
-      //         and import remote-only tasks into their bound files
-      await this.pullRemoteChanges(obsidianTasks, fileProjectMap, result);
 
       // Step 6: Delete orphaned tasks — DISABLED FOR NOW
       // The current implementation is too aggressive and deletes tasks that exist

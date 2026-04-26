@@ -151,9 +151,27 @@ This is invisible in Reading View and Live Preview, and links the Obsidian task 
 npm install
 npm run dev   # Watch mode — rebuilds on file change
 npm run build # Production build
+npm test      # Run test suite with Vitest
 ```
 
 Copy `main.js` and `manifest.json` to your test vault's plugin folder after building.
+
+### Testing
+
+This project includes comprehensive tests using [Vitest](https://vitest.dev/):
+
+```bash
+npm test              # Run tests in watch mode
+npm test -- --run     # Run tests once (CI mode)
+npm test:ui           # Open interactive test dashboard
+npm test:coverage     # Generate coverage report
+```
+
+Tests cover:
+- **TaskParser** (27 tests) — markdown parsing, serialization, metadata extraction
+- **Deletion Safeguards** (20 tests) — preventing accidental data loss
+
+See [docs/testing.md](docs/testing.md) for detailed testing documentation.
 
 ---
 

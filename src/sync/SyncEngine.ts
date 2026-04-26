@@ -570,8 +570,8 @@ export class SyncEngine {
    * still have tracking IDs in the file. Tasks without tracking IDs are
    * assumed to have been deleted from Obsidian, so they're deleted from Vikunja too.
    *
-   * This only applies to auto-created project files, which are treated as
-   * the source of truth for those projects.
+   * SAFETY: Only deletes if the file has been populated with at least some tasks.
+   * Prevents accidental mass deletion on first sync.
    */
   private async deleteOrphanedTasks(
     obsidianTasks: ObsidianTask[],
@@ -604,8 +604,31 @@ export class SyncEngine {
           localTasks.filter((t) => t.vikunjaId !== null).map((t) => t.vikunjaId!)
         );
 
+        // SAFETY: Only delete if the file has been populated with at least some tasks
+        // This prevents accidental mass deletion on first sync before tasks are imported
+        if (localTasks.length === 0) {
+          console.log(
+            `[Vikunja] Skipping orphan check for ${filePath} (file is empty, likely not yet populated)`
+          );
+          continue;
+        }
+
         // Fetch all tasks from this project in Vikunja
         const remoteTasks = await this.client.getProjectTasks(project.id);
+
+        // SAFETY: Never delete more than 50% of the tasks in a project
+        // This prevents catastrophic data loss if something is broken
+        const orphanedCount = remoteTasks.filter((t) => !localIds.has(t.id))
+          .length;
+        if (orphanedCount > remoteTasks.length * 0.5) {
+          console.warn(
+            `[Vikunja] Skipping deletion for ${project.title}: ${orphanedCount} orphaned tasks (>50%), likely a sync issue`
+          );
+          result.errors.push(
+            `Skipped deletion for project "${project.title}": too many orphaned tasks (${orphanedCount}/${remoteTasks.length}). Please check your sync state.`
+          );
+          continue;
+        }
 
         // Delete any task that's in Vikunja but not in the Obsidian file
         for (const remote of remoteTasks) {

@@ -280,11 +280,12 @@ export class VikunjaClient {
 
   /**
    * Add a label to a task.
-   * @param taskId  - The task to label
-   * @param labelId - The label to apply
+   * @param projectId - The project containing the task
+   * @param taskId    - The task to label
+   * @param labelId   - The label to apply
    */
-  async addLabelToTask(taskId: number, labelId: number): Promise<void> {
-    await this.request<void>(`/tasks/${taskId}/labels`, {
+  async addLabelToTask(projectId: number, taskId: number, labelId: number): Promise<void> {
+    await this.request<void>(`/projects/${projectId}/tasks/${taskId}/labels`, {
       method: "PUT",
       body: JSON.stringify({ label_id: labelId }),
     });
@@ -292,11 +293,12 @@ export class VikunjaClient {
 
   /**
    * Remove a label from a task.
-   * @param taskId  - The task
-   * @param labelId - The label to remove
+   * @param projectId - The project containing the task
+   * @param taskId    - The task
+   * @param labelId   - The label to remove
    */
-  async removeLabelFromTask(taskId: number, labelId: number): Promise<void> {
-    await this.request<void>(`/tasks/${taskId}/labels/${labelId}`, {
+  async removeLabelFromTask(projectId: number, taskId: number, labelId: number): Promise<void> {
+    await this.request<void>(`/projects/${projectId}/tasks/${taskId}/labels/${labelId}`, {
       method: "DELETE",
     });
   }

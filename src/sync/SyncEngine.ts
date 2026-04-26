@@ -389,7 +389,7 @@ export class SyncEngine {
           try {
             const labels = await this.resolveOrCreateLabels(task.tagNames);
             for (const label of labels) {
-              await this.client.addLabelToTask(created.id, label.id);
+              await this.client.addLabelToTask(projectId, created.id, label.id);
             }
             task.labels = labels;
             // Write updated task with labels back to file
@@ -509,13 +509,13 @@ export class SyncEngine {
             // Remove labels that are in remote but not in local
             for (const label of remoteLabels) {
               if (!localLabels.find((l) => l.id === label.id)) {
-                await this.client.removeLabelFromTask(task.vikunjaId!, label.id);
+                await this.client.removeLabelFromTask(task.projectId!, task.vikunjaId!, label.id);
               }
             }
             // Add labels that are in local but not in remote
             for (const label of localLabels) {
               if (!remoteLabels.find((l) => l.id === label.id)) {
-                await this.client.addLabelToTask(task.vikunjaId!, label.id);
+                await this.client.addLabelToTask(task.projectId!, task.vikunjaId!, label.id);
               }
             }
           } catch (err) {

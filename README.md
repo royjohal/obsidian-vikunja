@@ -12,9 +12,9 @@ A first-class Obsidian plugin for two-way sync between your Obsidian vault and [
 
 This plugin is designed to **replace the Obsidian Tasks plugin** entirely, using Vikunja as the backend. Your markdown `- [ ]` tasks become Vikunja tasks, giving you:
 
-- ✅ **Create tasks anywhere** — daily notes, meeting notes, any file
+- ✅ **Create tasks anywhere** — daily notes, meeting notes, any file in your vault
 - ✅ **Two-way sync** (Obsidian ↔ Vikunja) with automatic reconciliation
-- ✅ **Auto-created project files** — one `.md` per Vikunja project, zero setup
+- ✅ **Optional project dashboards** — manually create files to view all tasks from a project
 - ✅ **Auto-sync on save** and configurable periodic sync
 - ✅ **Rich metadata** — dates (📅 🛫 ⏳), priority (🔺), recurrence (🔁)
 - ✅ **Collaboration** — share projects via Vikunja's web UI, changes sync back

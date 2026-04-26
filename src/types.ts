@@ -146,8 +146,14 @@ export interface VikunjaPluginSettings {
   /**
    * When true, the plugin automatically creates one markdown file per
    * Vikunja project inside `projectsFolder`. Each file is pre-configured
-   * with the correct `vikunja_project_id` frontmatter and acts as the
-   * canonical task list for that project.
+   * with the correct `vikunja_project_id` frontmatter.
+   *
+   * **Recommended:** Keep this OFF (false). You can create project files
+   * manually when you want a dashboard for a specific project. This gives
+   * you flexibility to keep tasks scattered across your vault (daily notes,
+   * meeting notes, etc.) while optionally having centralized project views.
+   *
+   * Enable this only if you prefer automatic project file creation.
    */
   autoCreateProjectFiles: boolean;
   /**
@@ -168,7 +174,7 @@ export const DEFAULT_SETTINGS: VikunjaPluginSettings = {
   showRibbonIcon: true,
   syncCompletedTasks: true,
   excludedFolders: [],
-  autoCreateProjectFiles: true,
+  autoCreateProjectFiles: false, // Recommended: keep OFF, create project files manually when needed
   projectsFolder: "Vikunja",
 };
 

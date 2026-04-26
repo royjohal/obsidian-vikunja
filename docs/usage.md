@@ -102,21 +102,24 @@ If your tasks still have the old `<!--vikunja:42-->` format, both formats are re
 
 ## Project files
 
-The easiest way to work with Vikunja Sync is to let the plugin manage project files for you.
+### Recommended workflow: manual project dashboards
 
-### Auto-created project files
+Create tasks **anywhere in your vault** (daily notes, meeting notes, project plans) and let them sync automatically. When you want a centralized view of a specific project, create a dashboard file manually.
 
-When **Auto-create project files** is enabled (the default), the plugin creates one markdown file per Vikunja project inside the configured **Projects folder** (default: `Vikunja/`):
-
+**Example:**
 ```
-Vikunja/
-  Work Tasks.md
-  Personal.md
-  Shopping.md
+Projects/
+  Work.md          # Created manually — auto-populated
+  Personal.md      # Created manually — auto-populated
+Daily Notes/
+  2026-04-26.md    # Regular daily note with scattered tasks
+  2026-04-27.md    # Tasks here route to projects automatically
 ```
 
-Each file is pre-configured with the correct frontmatter:
+**To create a project dashboard:**
 
+1. Create a new file (e.g., `Projects/Work.md`)
+2. Add frontmatter with the project ID:
 ```yaml
 ---
 vikunja_project_id: 3
@@ -125,10 +128,28 @@ vikunja_project_id: 3
 # Work Tasks
 ```
 
-On every sync, all tasks from that project are pulled into the file automatically. New tasks you write there are pushed to Vikunja on save. You never need to set up frontmatter yourself.
+3. On next sync, all tasks from that project populate automatically
+4. New tasks created elsewhere still route to this project
+5. Tasks created in Vikunja web UI also appear here
 
-::: info Renames are safe
-If you rename a project in Vikunja, the existing file keeps working — the `vikunja_project_id` is the real identity, not the filename. The plugin never deletes or renames files it has created.
+**Benefits:**
+- ✅ Tasks live where they're relevant (daily notes, meeting notes, etc.)
+- ✅ Optional dashboards only for projects you frequently reference
+- ✅ Centralized view when you need it, scattered context when you don't
+- ✅ No cluttered auto-generated files you didn't ask for
+
+### Auto-created project files (optional)
+
+If you prefer automatic project file creation, enable **Auto-create project files** in Settings. The plugin will create one file per project:
+
+```yaml
+---
+vikunja_project_id: 3
+---
+```
+
+::: tip
+Most users find manual dashboards more flexible. Auto-creation is available if you prefer it.
 :::
 
 ### Per-note project assignment

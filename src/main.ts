@@ -20,9 +20,11 @@ import {
 import { VikunjaClient } from "./api/VikunjaClient";
 import { SyncEngine } from "./sync/SyncEngine";
 import { VikunjaSettingsTab } from "./ui/SettingsTab";
+import { LabelSuggest } from "./ui/LabelSuggest";
 import {
   DEFAULT_SETTINGS,
   type VikunjaPluginSettings,
+  type VikunjaLabel,
 } from "./types";
 
 export default class VikunjaPlugin extends Plugin {
@@ -40,6 +42,9 @@ export default class VikunjaPlugin extends Plugin {
 
   /** Prevents overlapping sync runs — if a sync is already in progress, new ones are skipped */
   private isSyncing = false;
+
+  /** Cached labels from last sync — used for autocomplete suggestions */
+  private cachedLabels: VikunjaLabel[] = [];
 
   // ─── Lifecycle ───────────────────────────────────────────────────────────────
 
@@ -97,6 +102,11 @@ export default class VikunjaPlugin extends Plugin {
     this.registerDomEvent(document, "click", async (evt) => {
       await this.handleEditorClick(evt);
     });
+
+    // Register label autocomplete suggester
+    this.registerEditorSuggest(
+      new LabelSuggest(() => this.cachedLabels)
+    );
 
     // Start periodic sync
     this.startSyncInterval();
@@ -170,6 +180,16 @@ export default class VikunjaPlugin extends Plugin {
 
     try {
       const result = await this.syncEngine.sync();
+
+      // Cache labels for autocomplete
+      try {
+        if (this.client) {
+          this.cachedLabels = await this.client.getLabels();
+        }
+      } catch (err) {
+        console.warn("[Vikunja] Failed to fetch labels for autocomplete:", err);
+      }
+
       notice.hide();
 
       const summary = [
@@ -207,6 +227,15 @@ export default class VikunjaPlugin extends Plugin {
       const result = await this.syncEngine.syncFile(file);
       if (result.errors.length > 0) {
         console.error("[Vikunja] Sync errors:", result.errors);
+      }
+
+      // Cache labels for autocomplete
+      try {
+        if (this.client) {
+          this.cachedLabels = await this.client.getLabels();
+        }
+      } catch (err) {
+        console.warn("[Vikunja] Failed to fetch labels for autocomplete:", err);
       }
     } catch (err) {
       console.error("[Vikunja] File sync error:", err);

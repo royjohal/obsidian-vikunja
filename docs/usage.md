@@ -96,6 +96,17 @@ Use Obsidian native tag syntax to label tasks. Tags automatically sync to Vikunj
 - **Multiple tags**: Add as many tags as you want — just repeat `#tagname` on the same line
 - **Bidirectional**: Change labels in Vikunja web UI (add, remove, etc.) and they appear as tags in Obsidian on the next sync
 
+**Autocomplete:**
+
+As you type `#` in a task line, the plugin suggests all available labels from Vikunja. This helps you use consistent label names across all tasks:
+
+```
+- [ ] Fix bug #|  ← Type here, and suggestions appear:
+                  #urgent, #bug, #review, #high-priority, ...
+```
+
+Suggestions are fetched after each sync, so new labels in Vikunja appear in autocomplete automatically.
+
 **Examples:**
 
 Tag names are sanitized to lowercase slug format (spaces → dashes, special chars removed):

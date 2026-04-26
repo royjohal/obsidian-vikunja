@@ -214,35 +214,27 @@ In Obsidian's **Reading view** and **Live Preview**, clicking a task checkbox im
 
 ## Task deletion
 
-When you delete a task line from an **auto-created project file** (files in the configured Projects folder), the plugin will also delete that task from Vikunja on the next sync.
+**⚠️ Task deletion is currently disabled (v0.1)**
 
-### How it works
+The task deletion feature is disabled in this version to prevent accidental data loss. A proper implementation requires state tracking to safely distinguish between:
+- Tasks explicitly deleted by the user
+- Tasks that exist in other files (daily notes, meeting notes, etc.)
 
-During each sync, for every auto-created project file, the plugin:
-1. Checks which tasks currently exist in that file (by their `%%vikunja:ID%%` tracking IDs)
-2. Fetches all tasks from that project in Vikunja
-3. Deletes any Vikunja tasks that are no longer in the Obsidian file
+### Planned for v0.2
 
-### Safety measures
+- Smart deletion that only deletes tasks you explicitly removed
+- Support for tasks created anywhere in the vault with default project binding
+- Safe deletion from auto-created project files
 
-The plugin includes two critical safeguards to prevent accidental data loss:
+### Current behavior
 
-1. **Empty file check** — If a project file has no tasks yet (hasn't been populated), deletion is skipped. This prevents mass deletion on first sync.
-2. **Threshold check** — If more than 50% of tasks in a project would be deleted, the operation is skipped and an error is reported. This catches sync issues before catastrophic data loss.
+- ✅ Tasks sync from Obsidian → Vikunja (creates/updates)
+- ✅ Tasks sync from Vikunja → Obsidian (updates/imports)
+- ❌ Task deletion → Vikunja (disabled, prevents data loss)
 
-If either safeguard triggers, you'll see a warning in the sync result explaining what happened.
-
-### What gets deleted
-
-- ✅ Tasks deleted from auto-created project files — **deleted from Vikunja** (with safeguards above)
-- ❌ Tasks deleted from regular notes with `@project:` or `vikunja_project_id` frontmatter — **not deleted** (these are not treated as the source of truth)
-- ❌ Tasks created directly in Vikunja (without ever being synced to Obsidian) — **not affected**
-
-### Why this matters
-
-Auto-created project files are treated as the **source of truth** for their projects. This makes it safe to manage tasks entirely in Obsidian — when you delete a line, you're telling the plugin to delete that task everywhere.
-
-For tasks in regular notes with `@project:` routing, deletion works the opposite way: remote tasks are imported, but you can't delete them from Obsidian. This prevents accidental loss of collaborators' work.
+**To delete a task from both places:**
+1. Delete from Obsidian
+2. Then manually delete from Vikunja web UI (for now)
 
 ---
 

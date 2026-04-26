@@ -21,7 +21,13 @@
 
 import type { App, TFile } from "obsidian";
 import type { VikunjaClient } from "../api/VikunjaClient";
-import type { VikunjaPluginSettings, ObsidianTask, SyncResult, VikunjaTask } from "../types";
+import type {
+  VikunjaPluginSettings,
+  ObsidianTask,
+  SyncResult,
+  VikunjaTask,
+  VikunjaProject,
+} from "../types";
 import { VIKUNJA_NULL_DATE } from "../types";
 import { TaskParser } from "./TaskParser";
 
@@ -32,6 +38,12 @@ export class SyncEngine {
 
   /** Tracks the last sync timestamp to detect remote changes */
   private lastSyncTime: Date | null = null;
+
+  /**
+   * Project list cache — populated once per sync run to avoid repeated API calls
+   * when resolving project names from frontmatter across many files.
+   */
+  private cachedProjects: VikunjaProject[] | null = null;
 
   constructor(app: App, client: VikunjaClient, settings: VikunjaPluginSettings) {
     this.app = app;
@@ -57,18 +69,34 @@ export class SyncEngine {
       timestamp: new Date(),
     };
 
-    try {
-      // Step 1: Scan the vault for all task lines
-      const obsidianTasks = await this.scanVault();
+    // Reset project cache so we get a fresh list for this run
+    this.cachedProjects = null;
 
-      // Step 2: Push new Obsidian tasks (no vikunjaId) to Vikunja
+    try {
+      // Step 1: Ensure every Vikunja project has a markdown file in the vault.
+      // Returns a map of newly-created file paths → project IDs so we can
+      // import tasks into them immediately, before Obsidian's metadata cache
+      // has had a chance to index their frontmatter.
+      const newProjectFiles = await this.ensureProjectFiles();
+
+      // Step 2: Scan the vault for all task lines + collect file→project bindings
+      const { tasks: obsidianTasks, fileProjectMap } = await this.scanVault();
+
+      // Merge newly-created project files into the map — metadata cache won't
+      // have their frontmatter yet so scanVault can't detect them on its own.
+      for (const [path, id] of newProjectFiles) {
+        if (!fileProjectMap.has(path)) fileProjectMap.set(path, id);
+      }
+
+      // Step 3: Push new Obsidian tasks (no vikunjaId) to Vikunja
       await this.pushNewTasks(obsidianTasks, result);
 
-      // Step 3: Push updates to existing tasks (have vikunjaId, content changed)
+      // Step 4: Push updates to existing tasks (have vikunjaId, content changed)
       await this.pushTaskUpdates(obsidianTasks, result);
 
-      // Step 4: Pull remote changes from Vikunja back to the vault
-      await this.pullRemoteChanges(obsidianTasks, result);
+      // Step 5: Pull remote changes from Vikunja back to the vault,
+      //         and import remote-only tasks into their bound files
+      await this.pullRemoteChanges(obsidianTasks, fileProjectMap, result);
 
     } catch (err) {
       result.errors.push(String(err));
@@ -81,6 +109,11 @@ export class SyncEngine {
   /**
    * Sync a single file. Called on file-save events for efficiency —
    * avoids re-scanning the entire vault when only one file changed.
+   *
+   * Also pulls remote-only tasks from Vikunja into the file when the note
+   * has an explicit project binding (`vikunja_project_id` or `vikunja_project`
+   * frontmatter). This is what populates a newly-created project note with
+   * tasks that already exist in Vikunja.
    *
    * @param file - The Obsidian TFile that was saved
    */
@@ -95,18 +128,30 @@ export class SyncEngine {
 
     if (this.isExcluded(file.path)) return result;
 
+    // Reset project cache for this run
+    this.cachedProjects = null;
+
     try {
       const content = await this.app.vault.read(file);
       const tasks = TaskParser.parseFile(content, file.path);
 
-      // Resolve project IDs from frontmatter
-      const projectId = await this.resolveProjectId(file);
+      // Resolve project IDs from frontmatter (explicit) or default
+      const explicitId = await this.getExplicitProjectId(file);
+      const effectiveId = explicitId ?? this.settings.defaultProjectId;
       for (const task of tasks) {
-        task.projectId = projectId;
+        task.projectId = effectiveId;
       }
 
       await this.pushNewTasks(tasks, result);
       await this.pushTaskUpdates(tasks, result);
+
+      // Pull remote tasks for this file's explicitly-bound project.
+      // This imports tasks that exist in Vikunja but haven't been synced
+      // to this note yet (e.g. tasks created in the Vikunja web UI).
+      if (explicitId !== null) {
+        const fileProjectMap = new Map([[file.path, explicitId]]);
+        await this.pullRemoteChanges(tasks, fileProjectMap, result);
+      }
     } catch (err) {
       result.errors.push(`Error syncing ${file.path}: ${String(err)}`);
     }
@@ -148,16 +193,88 @@ export class SyncEngine {
     await this.app.vault.modify(file, newContent);
   }
 
+  // ─── Project File Management ─────────────────────────────────────────────────
+
+  /**
+   * Ensure every non-archived Vikunja project has a corresponding markdown
+   * file in the configured projects folder.
+   *
+   * Each file is created with `vikunja_project_id` frontmatter pre-filled so
+   * the sync engine can route tasks correctly without any manual setup.
+   *
+   * Files that already exist are left untouched — this only creates missing ones.
+   * If a project is renamed in Vikunja the original file keeps working because
+   * the frontmatter ID is the real identity, not the filename.
+   *
+   * @returns A map of newly-created file paths → project IDs. Used by sync()
+   *          to seed the fileProjectMap before the metadata cache has indexed
+   *          the new files.
+   */
+  private async ensureProjectFiles(): Promise<Map<string, number>> {
+    const created = new Map<string, number>();
+
+    if (!this.settings.autoCreateProjectFiles) return created;
+
+    const folder = this.settings.projectsFolder.trim().replace(/\/+$/, "");
+    if (!folder) return created;
+
+    // Create the folder if it doesn't exist yet
+    if (!this.app.vault.getAbstractFileByPath(folder)) {
+      try {
+        await this.app.vault.createFolder(folder);
+      } catch {
+        // Folder may have been created by a concurrent operation — safe to ignore
+      }
+    }
+
+    const projects = await this.getCachedProjects();
+
+    for (const project of projects) {
+      if (project.is_archived) continue;
+
+      // Sanitise project title: replace characters forbidden in most filesystems
+      const safeName = project.title.replace(/[\\/:*?"<>|#^[\]]/g, "-").trim();
+      if (!safeName) continue;
+
+      const filePath = `${folder}/${safeName}.md`;
+
+      if (this.app.vault.getAbstractFileByPath(filePath)) continue; // Already exists
+
+      const content =
+        `---\nvikunja_project_id: ${project.id}\n---\n\n# ${project.title}\n\n`;
+
+      try {
+        await this.app.vault.create(filePath, content);
+        created.set(filePath, project.id);
+        console.log(`[Vikunja] Created project file: ${filePath}`);
+      } catch (err) {
+        console.error(`[Vikunja] Failed to create project file ${filePath}:`, err);
+      }
+    }
+
+    return created;
+  }
+
   // ─── Vault Scanning ─────────────────────────────────────────────────────────
 
   /**
    * Scan all markdown files in the vault for task lines.
    * Respects the excludedFolders setting.
    *
-   * @returns All ObsidianTask objects found in the vault
+   * Also builds a map of files that have an explicit project binding in their
+   * frontmatter (`vikunja_project_id` or `vikunja_project`). This map drives
+   * the remote-import step in pullRemoteChanges.
+   *
+   * @returns tasks — all ObsidianTask objects found in the vault
+   *          fileProjectMap — file path → Vikunja project ID, for files with
+   *                           explicit frontmatter project bindings only
    */
-  private async scanVault(): Promise<ObsidianTask[]> {
+  private async scanVault(): Promise<{
+    tasks: ObsidianTask[];
+    fileProjectMap: Map<string, number>;
+  }> {
     const allTasks: ObsidianTask[] = [];
+    const fileProjectMap = new Map<string, number>();
     const files = this.app.vault.getMarkdownFiles();
 
     for (const file of files) {
@@ -167,10 +284,18 @@ export class SyncEngine {
         const content = await this.app.vault.read(file);
         const tasks = TaskParser.parseFile(content, file.path);
 
-        // Resolve project IDs
-        const projectId = await this.resolveProjectId(file);
+        // Resolve explicit frontmatter binding (vikunja_project_id or vikunja_project)
+        const explicitId = await this.getExplicitProjectId(file);
+        const effectiveId = explicitId ?? this.settings.defaultProjectId;
+
         for (const task of tasks) {
-          task.projectId = projectId;
+          task.projectId = effectiveId;
+        }
+
+        // Track explicit bindings so pullRemoteChanges knows which files
+        // to import remote-only tasks into
+        if (explicitId !== null) {
+          fileProjectMap.set(file.path, explicitId);
         }
 
         allTasks.push(...tasks);
@@ -179,7 +304,7 @@ export class SyncEngine {
       }
     }
 
-    return allTasks;
+    return { tasks: allTasks, fileProjectMap };
   }
 
   // ─── Push: Obsidian → Vikunja ────────────────────────────────────────────────
@@ -187,16 +312,39 @@ export class SyncEngine {
   /**
    * Create Vikunja tasks for any Obsidian tasks that don't yet have a vikunjaId.
    * After creation, writes the vikunjaId back into the markdown line.
+   *
+   * Project resolution order (highest priority first):
+   *   1. Inline `@project:Name` token on the task line
+   *   2. `vikunja_project_id` / `vikunja_project` in the note's frontmatter
+   *   3. Default project configured in plugin settings
    */
   private async pushNewTasks(tasks: ObsidianTask[], result: SyncResult): Promise<void> {
     const newTasks = tasks.filter((t) => t.vikunjaId === null);
 
     for (const task of newTasks) {
-      const projectId = task.projectId ?? this.settings.defaultProjectId;
+      // Resolve project — inline @project: overrides the note-level binding
+      let projectId = task.projectId ?? this.settings.defaultProjectId;
+      if (task.projectName) {
+        const projects = await this.getCachedProjects();
+        const match = projects.find(
+          (p) => p.title.toLowerCase().trim() === task.projectName!.toLowerCase().trim()
+        );
+        if (match) {
+          projectId = match.id;
+        } else {
+          result.errors.push(
+            `Unknown project "@project:${task.projectName}" on task "${task.title}" ` +
+            `in ${task.filePath}. Check the name matches a project in Vikunja exactly.`
+          );
+          continue;
+        }
+      }
+
       if (!projectId) {
         result.errors.push(
-          `No project ID for task "${task.title}" in ${task.filePath}. ` +
-          `Set vikunja_project_id in frontmatter or configure a default project.`
+          `Skipped "${task.title}" in ${task.filePath} — no project assigned. ` +
+          `Add vikunja_project_id to the note's frontmatter, use @project:Name on ` +
+          `the task line, or set a Default Project in plugin settings.`
         );
         continue;
       }
@@ -246,10 +394,26 @@ export class SyncEngine {
 
   /**
    * Pull remote changes from Vikunja and write them back to the vault.
-   * Handles tasks completed remotely (e.g. by a collaborator via the web UI).
+   *
+   * Two things happen here:
+   *
+   * 1. **Update existing tasks** — tasks already tracked in Obsidian (those
+   *    with a `<!--vikunja:ID-->` comment) are compared against Vikunja and
+   *    updated if their title or done state changed remotely.
+   *
+   * 2. **Import remote-only tasks** — for files that have an explicit project
+   *    binding in their frontmatter (`vikunja_project_id` / `vikunja_project`),
+   *    any Vikunja tasks that have no Obsidian counterpart are appended to
+   *    that file. This is what populates a freshly-created project note with
+   *    tasks already in Vikunja.
+   *
+   * @param localTasks     - All ObsidianTask objects found in the vault
+   * @param fileProjectMap - Files with explicit project bindings (path → projectId)
+   * @param result         - Mutable result object to accumulate counts/errors
    */
   private async pullRemoteChanges(
     localTasks: ObsidianTask[],
+    fileProjectMap: Map<string, number>,
     result: SyncResult
   ): Promise<void> {
     // Build a map of vikunjaId → ObsidianTask for fast lookup
@@ -259,34 +423,101 @@ export class SyncEngine {
         .map((t) => [t.vikunjaId!, t])
     );
 
-    if (localById.size === 0) return;
+    // Track which remote task IDs we've already processed via per-project
+    // fetches so we don't double-count them in the fallback getAllTasks call.
+    const handledRemoteIds = new Set<number>();
 
-    // Fetch all remote tasks
-    let remoteTasks: VikunjaTask[] = [];
+    // ── Per-project import ──────────────────────────────────────────────────
+    // Group files by project so we only fetch each project once even when
+    // multiple notes share the same project ID.
+    const projectToFiles = new Map<number, string[]>();
+    for (const [filePath, projectId] of fileProjectMap) {
+      const list = projectToFiles.get(projectId) ?? [];
+      list.push(filePath);
+      projectToFiles.set(projectId, list);
+    }
+
+    for (const [projectId, filePaths] of projectToFiles) {
+      let remoteTasks: VikunjaTask[] = [];
+      try {
+        remoteTasks = await this.client.getProjectTasks(projectId);
+      } catch (err) {
+        result.errors.push(`Failed to fetch tasks for project ${projectId}: ${String(err)}`);
+        continue;
+      }
+
+      // Collect tasks to import (not yet in Obsidian) so we can batch-append
+      // them in a single file write rather than one write per task.
+      const toImport: VikunjaTask[] = [];
+
+      for (const remote of remoteTasks) {
+        handledRemoteIds.add(remote.id);
+        const local = localById.get(remote.id);
+
+        if (local) {
+          // Task already in Obsidian — update done/title if remote changed
+          let changed = false;
+          if (remote.done !== local.done) {
+            local.done = remote.done;
+            changed = true;
+            result.completed++;
+          }
+          if (remote.title !== local.title) {
+            local.title = remote.title;
+            changed = true;
+            result.updated++;
+          }
+          if (changed) await this.writeTaskToFile(local);
+        } else {
+          // Task exists only in Vikunja — queue it for import
+          // Skip completed tasks unless the user opted in
+          if (!remote.done || this.settings.syncCompletedTasks) {
+            toImport.push(remote);
+          }
+        }
+      }
+
+      // Append all new remote tasks to the primary file for this project
+      // (the first file that declared this project binding)
+      if (toImport.length > 0) {
+        await this.appendTasksToFile(filePaths[0], toImport, result);
+      }
+    }
+
+    // ── Fallback: update tracked tasks not covered by any bound project ─────
+    // These are tasks that have a vikunjaId in Obsidian but whose project is
+    // not explicitly bound in frontmatter (e.g. they use the default project).
+    const unhandledLocal = localTasks.filter(
+      (t) => t.vikunjaId !== null && !handledRemoteIds.has(t.vikunjaId!)
+    );
+
+    if (unhandledLocal.length === 0) return;
+
+    let allRemote: VikunjaTask[] = [];
     try {
-      remoteTasks = await this.client.getAllTasks();
+      allRemote = await this.client.getAllTasks();
     } catch (err) {
       result.errors.push(`Failed to fetch remote tasks: ${String(err)}`);
       return;
     }
 
-    for (const remote of remoteTasks) {
+    for (const remote of allRemote) {
+      if (handledRemoteIds.has(remote.id)) continue;
       const local = localById.get(remote.id);
       if (!local) continue;
 
-      // Check if remote done status differs from local
+      let changed = false;
       if (remote.done !== local.done) {
         local.done = remote.done;
-        await this.writeTaskToFile(local);
+        changed = true;
         result.completed++;
       }
-
-      // Sync title if changed remotely
       if (remote.title !== local.title) {
         local.title = remote.title;
-        await this.writeTaskToFile(local);
+        changed = true;
         result.updated++;
       }
+      if (changed) await this.writeTaskToFile(local);
     }
   }
 
@@ -310,23 +541,106 @@ export class SyncEngine {
     await this.app.vault.modify(file as TFile, newContent);
   }
 
+  /**
+   * Append a batch of Vikunja tasks to a file as new markdown task lines.
+   * All tasks are written in a single vault.modify call to minimise file churn.
+   *
+   * Used when importing remote-only tasks (tasks that exist in Vikunja but have
+   * no `<!--vikunja:ID-->` counterpart in the vault yet).
+   *
+   * @param filePath    - Vault-relative path of the target file
+   * @param remoteTasks - Vikunja tasks to append
+   * @param result      - Mutable result object; `created` is incremented per task
+   */
+  private async appendTasksToFile(
+    filePath: string,
+    remoteTasks: VikunjaTask[],
+    result: SyncResult
+  ): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(filePath);
+    if (!file || !("extension" in file)) return;
+
+    const content = await this.app.vault.read(file as TFile);
+
+    const newLines = remoteTasks.map((remote) => {
+      const task: ObsidianTask = {
+        rawLine: "",
+        lineNumber: -1,
+        filePath,
+        title: remote.title,
+        done: remote.done,
+        dueDate: SyncEngine.formatDate(remote.due_date),
+        startDate: SyncEngine.formatDate(remote.start_date),
+        scheduledDate: null, // Vikunja has no scheduled-date concept
+        priority: remote.priority,
+        vikunjaId: remote.id,
+        projectId: remote.project_id,
+      };
+      return TaskParser.serialise(task);
+    });
+
+    const newContent = content.trimEnd() + "\n" + newLines.join("\n") + "\n";
+    await this.app.vault.modify(file as TFile, newContent);
+
+    result.created += remoteTasks.length;
+  }
+
   // ─── Helpers ─────────────────────────────────────────────────────────────────
 
   /**
-   * Resolve the Vikunja project ID for a file.
-   * Checks frontmatter for `vikunja_project_id`, falls back to default.
-   *
-   * @param file - The file to check
+   * Fetch the project list, using a per-run in-memory cache so that name-based
+   * frontmatter lookups (`vikunja_project: "Work Tasks"`) across many files
+   * only result in a single API call per sync run.
    */
-  private async resolveProjectId(file: TFile): Promise<number | null> {
-    const cache = this.app.metadataCache.getFileCache(file);
-    const frontmatter = cache?.frontmatter;
+  private async getCachedProjects(): Promise<VikunjaProject[]> {
+    if (!this.cachedProjects) {
+      this.cachedProjects = await this.client.getProjects();
+    }
+    return this.cachedProjects;
+  }
+
+  /**
+   * Resolve the explicit project ID declared in a file's frontmatter.
+   *
+   * Supports two frontmatter properties:
+   * - `vikunja_project_id: 3`  — numeric ID, resolved directly
+   * - `vikunja_project: "Work Tasks"` — project name, resolved via API
+   *   (case-insensitive match against the authenticated user's project list)
+   *
+   * Returns `null` if the file has no explicit project binding. Does NOT
+   * fall back to the default project — use `resolveProjectId` for that.
+   *
+   * @param file - The file whose frontmatter to inspect
+   */
+  private async getExplicitProjectId(file: TFile): Promise<number | null> {
+    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
 
     if (frontmatter?.vikunja_project_id) {
       return Number(frontmatter.vikunja_project_id);
     }
 
-    return this.settings.defaultProjectId;
+    if (frontmatter?.vikunja_project) {
+      const name = String(frontmatter.vikunja_project).toLowerCase().trim();
+      const projects = await this.getCachedProjects();
+      const match = projects.find((p) => p.title.toLowerCase().trim() === name);
+      if (match) return match.id;
+      console.warn(
+        `[Vikunja] No project found with name "${frontmatter.vikunja_project}" in ${file.path}`
+      );
+    }
+
+    return null;
+  }
+
+  /**
+   * Resolve the effective Vikunja project ID for a file.
+   * Returns the explicit frontmatter binding if present, otherwise the
+   * plugin-wide default project. Returns null if neither is configured.
+   *
+   * @param file - The file to check
+   */
+  private async resolveProjectId(file: TFile): Promise<number | null> {
+    return (await this.getExplicitProjectId(file)) ?? this.settings.defaultProjectId;
   }
 
   /**

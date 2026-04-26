@@ -39,6 +39,15 @@ const START_DATE_REGEX = /🛫\s*(\d{4}-\d{2}-\d{2})/;
 /** Matches scheduled date emoji: `⏳ 2026-04-20` */
 const SCHEDULED_DATE_REGEX = /⏳\s*(\d{4}-\d{2}-\d{2})/;
 
+/**
+ * Matches an inline project override: `@project:Work Tasks`
+ * The project name runs to the end of the token (stops at whitespace that
+ * precedes another metadata marker or end-of-string). Using a greedy match
+ * up to the next `@`, emoji, `<!--`, or end-of-string keeps multi-word names
+ * working without requiring quotes.
+ */
+const PROJECT_OVERRIDE_REGEX = /@project:([^@<📅🛫⏳🔺⏫🔼🔽⏬]+)/;
+
 /** All priority emojis — used to strip from title */
 const PRIORITY_EMOJIS = Object.keys(PRIORITY_MAP);
 
@@ -103,7 +112,11 @@ export class TaskParser {
       }
     }
 
-    // Clean title: strip all metadata markers
+    // Extract inline project override: @project:Name
+    const projectMatch = rawContent.match(PROJECT_OVERRIDE_REGEX);
+    const projectName = projectMatch ? projectMatch[1].trim() : null;
+
+    // Clean title: strip all metadata markers including @project:
     const title = TaskParser.cleanTitle(rawContent);
 
     return {
@@ -117,7 +130,8 @@ export class TaskParser {
       scheduledDate: scheduledDateMatch ? scheduledDateMatch[1] : null,
       priority,
       vikunjaId,
-      projectId: null, // Resolved later from frontmatter or folder mapping
+      projectId: null,   // Resolved later from frontmatter, @project:, or default
+      projectName,
     };
   }
 
@@ -141,6 +155,9 @@ export class TaskParser {
       title = title.replace(emoji, "");
     }
 
+    // Remove inline project override token
+    title = title.replace(PROJECT_OVERRIDE_REGEX, "");
+
     // Normalise whitespace
     return title.trim().replace(/\s+/g, " ");
   }
@@ -160,6 +177,13 @@ export class TaskParser {
 
     const checkmark = task.done ? "x" : " ";
     let line = `${indent}- [${checkmark}] ${task.title}`;
+
+    // Append inline project override so it survives round-trips.
+    // Once the task has a vikunjaId the token is no longer needed for
+    // routing, but we keep it so the user's intent remains visible.
+    if (task.projectName) {
+      line += ` @project:${task.projectName}`;
+    }
 
     // Append priority emoji
     if (task.priority > 0 && PRIORITY_MAP_REVERSE[task.priority]) {

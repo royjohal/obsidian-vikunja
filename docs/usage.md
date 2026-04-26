@@ -65,25 +65,94 @@ This comment:
 
 ---
 
-## Per-note project assignment
+## Project files
 
-Add `vikunja_project_id` to a note's YAML frontmatter to route all tasks in that note to a specific Vikunja project:
+The easiest way to work with Vikunja Sync is to let the plugin manage project files for you.
+
+### Auto-created project files
+
+When **Auto-create project files** is enabled (the default), the plugin creates one markdown file per Vikunja project inside the configured **Projects folder** (default: `Vikunja/`):
+
+```
+Vikunja/
+  Work Tasks.md
+  Personal.md
+  Shopping.md
+```
+
+Each file is pre-configured with the correct frontmatter:
 
 ```yaml
 ---
-title: Work Tasks
 vikunja_project_id: 3
 ---
 
-- [ ] Review the quarterly report 📅 2026-04-25
-- [ ] Schedule team standup ⏫
+# Work Tasks
 ```
 
-::: info Project ID lookup
-Find a project's ID in Vikunja by opening the project and checking the URL: `vikunja.example.com/projects/3` → ID is `3`.
+On every sync, all tasks from that project are pulled into the file automatically. New tasks you write there are pushed to Vikunja on save. You never need to set up frontmatter yourself.
+
+::: info Renames are safe
+If you rename a project in Vikunja, the existing file keeps working — the `vikunja_project_id` is the real identity, not the filename. The plugin never deletes or renames files it has created.
 :::
 
-If a note has no frontmatter project ID, the **Default Project** from plugin settings is used. Tasks with no project at all (no frontmatter and no default configured) are skipped with an error logged to the console.
+### Per-note project assignment
+
+For tasks embedded in context-rich notes (daily notes, meeting notes, project plans), you can manually bind any note to a Vikunja project via frontmatter.
+
+**By ID:**
+
+```yaml
+---
+vikunja_project_id: 3
+---
+```
+
+**By name** (case-insensitive, resolved at sync time):
+
+```yaml
+---
+vikunja_project: Work Tasks
+---
+```
+
+::: tip
+`vikunja_project_id` is faster and immune to project renames. `vikunja_project` is more readable. Use whichever feels natural.
+:::
+
+### Inline project override with `@project:`
+
+To send a single task to a specific project without changing the note's frontmatter, add `@project:Name` anywhere on the task line:
+
+```markdown
+- [ ] Follow up with Alex @project:Work Tasks
+- [ ] Buy groceries @project:Personal 📅 2026-05-01
+```
+
+The `@project:` token is stripped from the task title before it's pushed to Vikunja, so the task appears with a clean title there. It's preserved in the markdown line so future syncs keep routing it correctly.
+
+This is especially useful in daily notes, meeting notes, or anywhere you want tasks to land in a specific Vikunja project without leaving your current note.
+
+### Remote task import
+
+When a note has a project binding (via auto-created file, frontmatter, or `@project:`), syncing **pulls all tasks from that Vikunja project into the file** — not just tasks you created in Obsidian:
+
+- Tasks created in Vikunja's web UI appear in the file after the next sync.
+- Collaborators' tasks show up automatically.
+- A freshly connected vault gets populated on the first sync.
+
+Each imported task gets a `<!--vikunja:ID-->` tracking comment so future syncs know it's already linked.
+
+### First install — existing tasks
+
+Tasks in notes with **no project binding** (no frontmatter and no `@project:`) are skipped on sync. They won't be pushed to Vikunja until you assign them to a project. This is intentional — it prevents a bulk accidental import on first run.
+
+To sync existing tasks:
+1. Move them into an auto-created project file (`Vikunja/Work Tasks.md`), or
+2. Add `vikunja_project_id` or `vikunja_project` to the note's frontmatter, or
+3. Add `@project:Name` to individual task lines
+
+If no project is configured at all (no frontmatter, no `@project:`, no Default Project setting), the sync result will list each skipped task with a message explaining how to assign it.
 
 ---
 

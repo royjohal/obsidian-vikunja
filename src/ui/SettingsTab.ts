@@ -73,12 +73,14 @@ export class VikunjaSettingsTab extends PluginSettingTab {
 
             if (result.success) {
               new Notice("✅ Connected to Vikunja successfully!");
+              // Re-render the settings tab so the Default Project dropdown
+              // is populated now that we have a live connection.
+              this.display();
             } else {
               new Notice(`❌ Connection failed: ${result.error}`);
+              btn.setButtonText("Test");
+              btn.setDisabled(false);
             }
-
-            btn.setButtonText("Test");
-            btn.setDisabled(false);
           })
       );
 
@@ -110,6 +112,49 @@ export class VikunjaSettingsTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           });
       });
+
+    // ── Project Files ─────────────────────────────────────────────────────────
+    containerEl.createEl("h2", { text: "Project Files" });
+
+    new Setting(containerEl)
+      .setName("Auto-create project files")
+      .setDesc(
+        "Automatically create one markdown file per Vikunja project in the " +
+        "folder below. Each file is pre-configured with the correct project ID " +
+        "and acts as the task list for that project. Files are only created — " +
+        "never deleted or renamed — so renaming a project in Vikunja won't " +
+        "affect existing files."
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.autoCreateProjectFiles)
+          .onChange(async (value) => {
+            this.plugin.settings.autoCreateProjectFiles = value;
+            await this.plugin.saveSettings();
+            // Show/hide the folder setting without a full re-render
+            folderSetting.settingEl.toggle(value);
+          })
+      );
+
+    const folderSetting = new Setting(containerEl)
+      .setName("Projects folder")
+      .setDesc(
+        "Vault-relative folder where project files are created. " +
+        "The folder is created automatically if it doesn't exist. " +
+        "Example: Vikunja, Tasks/Projects"
+      )
+      .addText((text) =>
+        text
+          .setPlaceholder("Vikunja")
+          .setValue(this.plugin.settings.projectsFolder)
+          .onChange(async (value) => {
+            this.plugin.settings.projectsFolder = value.trim().replace(/\/+$/, "");
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // Hide folder setting when auto-create is off
+    folderSetting.settingEl.toggle(this.plugin.settings.autoCreateProjectFiles);
 
     // ── Sync Behaviour ────────────────────────────────────────────────────────
     containerEl.createEl("h2", { text: "Sync Behaviour" });

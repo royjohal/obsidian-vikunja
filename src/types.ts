@@ -107,6 +107,12 @@ export interface ObsidianTask {
   vikunjaId: number | null;
   /** The Vikunja project ID inferred from the file's frontmatter or folder */
   projectId: number | null;
+  /**
+   * Inline project name override parsed from `@project:Name` syntax.
+   * When present, this takes precedence over the note's frontmatter binding.
+   * Stripped from the task title before pushing to Vikunja.
+   */
+  projectName: string | null;
 }
 
 /** Plugin settings stored in Obsidian's data.json */
@@ -127,6 +133,19 @@ export interface VikunjaPluginSettings {
   syncCompletedTasks: boolean;
   /** Folders to exclude from task scanning (comma-separated) */
   excludedFolders: string[];
+  /**
+   * When true, the plugin automatically creates one markdown file per
+   * Vikunja project inside `projectsFolder`. Each file is pre-configured
+   * with the correct `vikunja_project_id` frontmatter and acts as the
+   * canonical task list for that project.
+   */
+  autoCreateProjectFiles: boolean;
+  /**
+   * Vault-relative folder where auto-created project files are placed.
+   * The folder is created if it does not exist.
+   * Only used when `autoCreateProjectFiles` is true.
+   */
+  projectsFolder: string;
 }
 
 /** Default plugin settings */
@@ -139,6 +158,8 @@ export const DEFAULT_SETTINGS: VikunjaPluginSettings = {
   showRibbonIcon: true,
   syncCompletedTasks: true,
   excludedFolders: [],
+  autoCreateProjectFiles: true,
+  projectsFolder: "Vikunja",
 };
 
 // ─── Sync State Types ─────────────────────────────────────────────────────────

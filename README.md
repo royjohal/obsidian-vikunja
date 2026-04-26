@@ -10,8 +10,10 @@ A first-class Obsidian plugin for two-way sync between your Obsidian vault and [
 This plugin is designed to **replace the Obsidian Tasks plugin** entirely, using Vikunja as the backend. Your markdown `- [ ]` tasks become Vikunja tasks, giving you:
 
 - ✅ Two-way sync (Obsidian ↔ Vikunja)
+- 📁 Auto-created project files — one `.md` per Vikunja project, zero setup
 - 🔄 Auto-sync on save and on a configurable schedule
 - 👥 Collaboration — share projects with others via Vikunja's web UI
+- 🏷️ Inline `@project:Name` to route tasks from any note
 - 📅 Calendar view *(coming in v0.2)*
 - 📊 Gantt view *(coming in v0.3)*
 
@@ -79,19 +81,35 @@ The plugin understands the same task syntax as the Obsidian Tasks plugin:
 - [ ] Highest priority 🔺
 ```
 
+### Auto-created project files
+
+With **Auto-create project files** enabled (the default), the plugin creates one `.md` file per Vikunja project in the configured folder (default: `Vikunja/`). Each file is pre-configured and populated automatically — no manual frontmatter needed.
+
 ### Per-note project assignment
 
-Add `vikunja_project_id` to a note's frontmatter to associate all tasks in that note with a specific Vikunja project:
+Add `vikunja_project_id` or `vikunja_project` to a note's frontmatter to bind all tasks in that note to a specific Vikunja project:
 
 ```yaml
 ---
-title: Work Tasks
-vikunja_project_id: 3
+vikunja_project_id: 3          # by ID
+# or
+vikunja_project: Work Tasks    # by name (case-insensitive)
 ---
 
 - [ ] Review the quarterly report 📅 2026-04-25
 - [ ] Schedule team meeting
 ```
+
+### Inline project override
+
+Route a single task to any project from any note with `@project:Name`:
+
+```markdown
+- [ ] Follow up with Alex @project:Work Tasks
+- [ ] Buy milk @project:Personal 📅 2026-05-01
+```
+
+The `@project:` token is stripped from the task title before syncing to Vikunja.
 
 ### Synced task IDs
 

@@ -98,6 +98,10 @@ export class SyncEngine {
       //         and import remote-only tasks into their bound files
       await this.pullRemoteChanges(obsidianTasks, fileProjectMap, result);
 
+      // Step 6: Delete orphaned tasks — if a task was deleted from Obsidian
+      // (removed from an auto-created project file), delete it from Vikunja too
+      await this.deleteOrphanedTasks(obsidianTasks, result);
+
     } catch (err) {
       result.errors.push(String(err));
     }
@@ -556,6 +560,76 @@ export class SyncEngine {
         result.updated++;
       }
       if (changed) await this.writeTaskToFile(local);
+    }
+  }
+
+  /**
+   * Delete tasks from Vikunja that were deleted from Obsidian.
+   *
+   * For each auto-created project file, checks if all tasks in Vikunja
+   * still have tracking IDs in the file. Tasks without tracking IDs are
+   * assumed to have been deleted from Obsidian, so they're deleted from Vikunja too.
+   *
+   * This only applies to auto-created project files, which are treated as
+   * the source of truth for those projects.
+   */
+  private async deleteOrphanedTasks(
+    obsidianTasks: ObsidianTask[],
+    result: SyncResult
+  ): Promise<void> {
+    if (!this.settings.autoCreateProjectFiles) return;
+
+    const folder = this.settings.projectsFolder.trim().replace(/\/+$/, "");
+    if (!folder) return;
+
+    const projects = await this.getCachedProjects();
+
+    for (const project of projects) {
+      if (project.is_archived) continue;
+
+      // Construct the expected file path for this project
+      const safeName = project.title.replace(/[\\/:*?"<>|#^[\]]/g, "-").trim();
+      if (!safeName) continue;
+      const filePath = `${folder}/${safeName}.md`;
+
+      // Get the file from Obsidian
+      const file = this.app.vault.getAbstractFileByPath(filePath);
+      if (!file || !("extension" in file)) continue; // File doesn't exist, skip
+
+      try {
+        // Parse the file to get current tracking IDs
+        const content = await this.app.vault.read(file as TFile);
+        const localTasks = TaskParser.parseFile(content, filePath);
+        const localIds = new Set(
+          localTasks.filter((t) => t.vikunjaId !== null).map((t) => t.vikunjaId!)
+        );
+
+        // Fetch all tasks from this project in Vikunja
+        const remoteTasks = await this.client.getProjectTasks(project.id);
+
+        // Delete any task that's in Vikunja but not in the Obsidian file
+        for (const remote of remoteTasks) {
+          if (!localIds.has(remote.id)) {
+            try {
+              await this.client.deleteTask(remote.id);
+              result.deleted = (result.deleted ?? 0) + 1;
+              console.log(
+                `[Vikunja] Deleted orphaned task ${remote.id} (was removed from Obsidian)`
+              );
+            } catch (err) {
+              console.error(
+                `[Vikunja] Failed to delete orphaned task ${remote.id}:`,
+                err
+              );
+            }
+          }
+        }
+      } catch (err) {
+        console.error(
+          `[Vikunja] Failed to check orphaned tasks in project ${project.id}:`,
+          err
+        );
+      }
     }
   }
 

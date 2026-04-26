@@ -212,6 +212,31 @@ In Obsidian's **Reading view** and **Live Preview**, clicking a task checkbox im
 
 ---
 
+## Task deletion
+
+When you delete a task line from an **auto-created project file** (files in the configured Projects folder), the plugin will also delete that task from Vikunja on the next sync.
+
+### How it works
+
+During each sync, for every auto-created project file, the plugin:
+1. Checks which tasks currently exist in that file (by their `%%vikunja:ID%%` tracking IDs)
+2. Fetches all tasks from that project in Vikunja
+3. Deletes any Vikunja tasks that are no longer in the Obsidian file
+
+### What gets deleted
+
+- ✅ Tasks deleted from auto-created project files — **always deleted from Vikunja**
+- ❌ Tasks deleted from regular notes with `@project:` or `vikunja_project_id` frontmatter — **not deleted** (these are not treated as the source of truth)
+- ❌ Tasks created directly in Vikunja (without ever being synced to Obsidian) — **not affected**
+
+### Why this matters
+
+Auto-created project files are treated as the **source of truth** for their projects. This makes it safe to manage tasks entirely in Obsidian — when you delete a line, you're telling the plugin to delete that task everywhere.
+
+For tasks in regular notes with `@project:` routing, deletion works the opposite way: remote tasks are imported, but you can't delete them from Obsidian. This prevents accidental loss of collaborators' work.
+
+---
+
 ## Excluded folders
 
 To prevent certain folders from being scanned during full vault syncs, add them to **Settings → Vikunja Sync → Excluded Folders**, one per line:

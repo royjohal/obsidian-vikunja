@@ -179,6 +179,7 @@ export interface SyncResult {
   created: number;
   updated: number;
   completed: number;
+  deleted?: number;
   errors: string[];
   timestamp: Date;
 }

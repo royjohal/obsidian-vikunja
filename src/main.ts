@@ -176,6 +176,7 @@ export default class VikunjaPlugin extends Plugin {
         result.created > 0 ? `${result.created} created` : null,
         result.updated > 0 ? `${result.updated} updated` : null,
         result.completed > 0 ? `${result.completed} completed` : null,
+        result.deleted && result.deleted > 0 ? `${result.deleted} deleted` : null,
       ]
         .filter(Boolean)
         .join(", ");

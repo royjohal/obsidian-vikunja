@@ -610,9 +610,10 @@ export class SyncEngine {
             result.updated++;
           }
           // Sync labels from remote
-          if (remote.labels.length !== local.labels.length ||
-              !this.labelArraysEqual(remote.labels, local.labels)) {
-            local.labels = remote.labels;
+          const remoteLabels = remote.labels || [];
+          if (remoteLabels.length !== local.labels.length ||
+              !this.labelArraysEqual(remoteLabels, local.labels)) {
+            local.labels = remoteLabels;
             changed = true;
           }
           if (changed) await this.writeTaskToFile(local);
@@ -666,9 +667,10 @@ export class SyncEngine {
         result.updated++;
       }
       // Sync labels from remote
-      if (remote.labels.length !== local.labels.length ||
-          !this.labelArraysEqual(remote.labels, local.labels)) {
-        local.labels = remote.labels;
+      const remoteLabels = remote.labels || [];
+      if (remoteLabels.length !== local.labels.length ||
+          !this.labelArraysEqual(remoteLabels, local.labels)) {
+        local.labels = remoteLabels;
         changed = true;
       }
       if (changed) await this.writeTaskToFile(local);

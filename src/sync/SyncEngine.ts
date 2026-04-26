@@ -405,6 +405,19 @@ export class SyncEngine {
       // If the task no longer exists remotely, skip (it may have been deleted)
       if (!remote) continue;
 
+      // SAFETY: Skip if title contains replacement characters (corruption detected)
+      if (task.title.includes('�')) {
+        console.warn(
+          `[Vikunja] Skipping update for task ${task.vikunjaId}: title contains corruption (replacement characters). ` +
+          `Title: "${task.title}". This task may need manual repair.`
+        );
+        result.errors.push(
+          `Skipped corrupted task ${task.vikunjaId}: title contains replacement characters. ` +
+          `Please check this task in both Obsidian and Vikunja.`
+        );
+        continue;
+      }
+
       const localRepeatAfter = TaskParser.parseRepeatAfter(task.recurrence) ?? 0;
       const localDueDate  = task.dueDate  ? new Date(task.dueDate).toISOString()  : null;
       const localStartDate = task.startDate ? new Date(task.startDate).toISOString() : null;

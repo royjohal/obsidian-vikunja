@@ -62,7 +62,7 @@ const RECURRENCE_EXTRACT_REGEX = /🔁\s*([^🔺⏫🔼🔽⏬📅🛫⏳➕✅�
  * Matches an inline project override: `@project:Work Tasks`
  * Stops at the next metadata marker so multi-word names work without quotes.
  */
-const PROJECT_OVERRIDE_REGEX = /@project:([^@<📅🛫⏳🔺⏫🔼🔽⏬➕✅❌🆔⛔🏁]+)/;
+const PROJECT_OVERRIDE_REGEX = /@project:([^@<📅🛫⏳🔺⏫🔼🔽⏬➕✅❌🆔⛔🏁%]+)/;
 
 /** All priority emojis */
 const PRIORITY_EMOJIS = Object.keys(PRIORITY_MAP);

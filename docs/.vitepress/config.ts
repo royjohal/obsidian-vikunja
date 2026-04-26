@@ -5,9 +5,11 @@ export default defineConfig({
   description: "Two-way sync between Obsidian tasks and Vikunja",
   base: "/",
 
-  head: [["link", { rel: "icon", href: "/obsidian-vikunja/favicon.svg" }]],
+  head: [["link", { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" }]],
 
   themeConfig: {
+    logo: { light: "/logo.svg", dark: "/logo.svg" },
+
     nav: [
       { text: "Getting Started", link: "/getting-started" },
       { text: "Usage", link: "/usage" },

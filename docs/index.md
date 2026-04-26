@@ -5,6 +5,9 @@ hero:
   name: "Vikunja Sync"
   text: "Obsidian tasks, powered by Vikunja"
   tagline: Two-way sync between your Obsidian vault and Vikunja — the open-source task management platform. Write tasks in Markdown, collaborate in Vikunja.
+  image:
+    src: /logo-large.svg
+    alt: Vikunja Sync
   actions:
     - theme: brand
       text: Get Started

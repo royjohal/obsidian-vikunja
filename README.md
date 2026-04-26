@@ -1,4 +1,7 @@
-# Obsidian Vikunja Sync
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/public/wordmark-dark.svg">
+  <img src="docs/public/wordmark-light.svg" alt="Vikunja Sync" height="60">
+</picture>
 
 **[Documentation →](https://obsidian-vikunja.vercel.app)**
 

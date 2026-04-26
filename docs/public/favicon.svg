@@ -1,0 +1,23 @@
+<svg width="32" height="32" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="crystalC" x1="20" y1="10" x2="100" y2="110" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#c4a8f0"></stop>
+      <stop offset="40%" stop-color="#7c3aed"></stop>
+      <stop offset="100%" stop-color="#3b1a7a"></stop>
+    </linearGradient>
+  </defs>
+  <path d="M60 6 L102 34 L98 86 L60 110 L22 86 L18 34 Z" fill="url(#crystalC)"></path>
+  <path d="M60 6 L18 34 L60 52 Z" fill="rgba(200,160,240,0.5)"></path>
+  <g transform="translate(34, 38)" opacity="0.95">
+    <ellipse cx="26" cy="38" rx="16" ry="12" fill="white" opacity="0.9"></ellipse>
+    <rect x="20" y="18" width="10" height="24" rx="5" fill="white" opacity="0.9"></rect>
+    <ellipse cx="25" cy="14" rx="8" ry="7" fill="white" opacity="0.9"></ellipse>
+    <path d="M19 9 L17 2 L22 7 Z" fill="white" opacity="0.9"></path>
+    <path d="M31 9 L33 2 L28 7 Z" fill="white" opacity="0.9"></path>
+    <rect x="14" y="47" width="5" height="14" rx="2.5" fill="white" opacity="0.8"></rect>
+    <rect x="21" y="47" width="5" height="14" rx="2.5" fill="white" opacity="0.8"></rect>
+    <rect x="30" y="47" width="5" height="14" rx="2.5" fill="white" opacity="0.8"></rect>
+  </g>
+  <circle cx="92" cy="28" r="14" fill="#3b82f6"></circle>
+  <path d="M85 28 L90 33 L99 22" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+</svg>

@@ -4,7 +4,6 @@
 </picture>
 
 [![Tests](https://github.com/royjohal/obsidian-vikunja/actions/workflows/test.yml/badge.svg)](https://github.com/royjohal/obsidian-vikunja/actions/workflows/test.yml)
-[![codecov](https://codecov.io/gh/royjohal/obsidian-vikunja/branch/main/graph/badge.svg)](https://codecov.io/gh/royjohal/obsidian-vikunja)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **[Documentation →](https://obsidian-vikunja.vercel.app)**

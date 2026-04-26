@@ -3,6 +3,10 @@
   <img src="docs/public/wordmark-light.svg" alt="Vikunja Sync" height="60">
 </picture>
 
+[![Tests](https://github.com/royjohal/obsidian-vikunja/actions/workflows/test.yml/badge.svg)](https://github.com/royjohal/obsidian-vikunja/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/royjohal/obsidian-vikunja/branch/main/graph/badge.svg)](https://codecov.io/gh/royjohal/obsidian-vikunja)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **[Documentation →](https://obsidian-vikunja.vercel.app)**
 
 A first-class Obsidian plugin for two-way sync between your Obsidian vault and [Vikunja](https://vikunja.io) — the open-source task management platform.

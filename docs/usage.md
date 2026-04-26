@@ -223,9 +223,18 @@ During each sync, for every auto-created project file, the plugin:
 2. Fetches all tasks from that project in Vikunja
 3. Deletes any Vikunja tasks that are no longer in the Obsidian file
 
+### Safety measures
+
+The plugin includes two critical safeguards to prevent accidental data loss:
+
+1. **Empty file check** — If a project file has no tasks yet (hasn't been populated), deletion is skipped. This prevents mass deletion on first sync.
+2. **Threshold check** — If more than 50% of tasks in a project would be deleted, the operation is skipped and an error is reported. This catches sync issues before catastrophic data loss.
+
+If either safeguard triggers, you'll see a warning in the sync result explaining what happened.
+
 ### What gets deleted
 
-- ✅ Tasks deleted from auto-created project files — **always deleted from Vikunja**
+- ✅ Tasks deleted from auto-created project files — **deleted from Vikunja** (with safeguards above)
 - ❌ Tasks deleted from regular notes with `@project:` or `vikunja_project_id` frontmatter — **not deleted** (these are not treated as the source of truth)
 - ❌ Tasks created directly in Vikunja (without ever being synced to Obsidian) — **not affected**
 

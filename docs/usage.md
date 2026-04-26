@@ -276,6 +276,21 @@ Exclusions are prefix-matched — `Archive` excludes `Archive/`, `Archive/Old/`,
 
 ## Conflict resolution
 
-When the same task is changed in both Obsidian and Vikunja between syncs, **Vikunja wins**. Vikunja is treated as the source of truth for collaboration — this means a change made by a teammate in Vikunja will overwrite a local Obsidian change if the remote timestamp is newer.
+When the same task is changed in both Obsidian and Vikunja between syncs, **last-write-wins** based on timestamps.
 
-For solo use this rarely matters since syncs happen frequently. For collaborative use, make significant edits in Vikunja's UI where timestamps are more reliable.
+How it works:
+- The file's modification time (mtime) is used as the local change timestamp
+- The task's `updated` timestamp from Vikunja is used as the remote change timestamp
+- If the remote change is newer, it's kept (local change is not pushed)
+- If the local change is newer, it's pushed (overwrites the remote state)
+- If timestamps can't be determined, the local change is pushed (safe default)
+
+**Example scenarios:**
+
+| Scenario | Local mtime | Remote updated | Result |
+|----------|------------|-----------------|--------|
+| You edit in Obsidian at 2:05 PM, task edited in Vikunja at 2:00 PM | 2:05 PM | 2:00 PM | Your Obsidian change wins |
+| You edit in Obsidian at 2:00 PM, task edited in Vikunja at 2:05 PM | 2:00 PM | 2:05 PM | Remote Vikunja change wins |
+| You edit in Obsidian, teammate edits in Vikunja at the same time | 2:05 PM | 2:05 PM | Local change is pushed (both are equally recent) |
+
+This approach respects work on both platforms and prevents accidentally overwriting recent changes. For collaborative use, the most recent change is always preserved.

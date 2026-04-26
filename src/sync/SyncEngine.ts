@@ -439,6 +439,29 @@ export class SyncEngine {
 
       if (nothingChanged) continue;
 
+      // ─── Conflict Resolution: Timestamp-based last-write-wins ───
+      // When both platforms changed the task, compare timestamps to determine the winner.
+      // Use file modification time as a proxy for local change time.
+      try {
+        const file = this.app.vault.getAbstractFileByPath(task.filePath);
+        if (file && "stat" in file && "mtime" in (file as any).stat) {
+          const localMtime = new Date((file as any).stat.mtime);
+          const remoteUpdated = new Date(remote.updated);
+
+          // If remote was updated AFTER the local file was modified, remote wins
+          if (remoteUpdated > localMtime) {
+            console.log(
+              `[Vikunja] Skipping push for task ${task.vikunjaId}: ` +
+              `remote updated (${remoteUpdated.toISOString()}) is newer than ` +
+              `local file modified (${localMtime.toISOString()})`
+            );
+            continue; // Don't push; remote state is more recent
+          }
+        }
+      } catch {
+        // If we can't get file stats, proceed with the push (safer than losing work)
+      }
+
       try {
         await this.client.updateTask(task.vikunjaId!, {
           title:        task.title,

@@ -78,6 +78,36 @@ You can combine dates, priority, and recurrence freely:
 - [x] Send onboarding email ⏫ <!--vikunja:17-->
 ```
 
+### Labels (Tags)
+
+Use Obsidian native tag syntax to label tasks. Tags automatically sync to Vikunja labels bidirectionally.
+
+```markdown
+- [ ] Fix authentication bug #urgent #bug
+- [ ] Review design mockups #review #high-priority 📅 2026-04-28
+- [ ] Deploy to staging #release #testing @project:DevOps
+```
+
+**How it works:**
+
+- **Obsidian → Vikunja**: `#tagname` tokens are parsed from your task lines and matched to Vikunja labels by title (case-insensitive)
+- **Vikunja → Obsidian**: Labels on tasks in Vikunja are converted back to `#tagname` format
+- **New labels**: If a tag doesn't match any existing Vikunja label, a new label is automatically created (with a random color)
+- **Multiple tags**: Add as many tags as you want — just repeat `#tagname` on the same line
+- **Bidirectional**: Change labels in Vikunja web UI (add, remove, etc.) and they appear as tags in Obsidian on the next sync
+
+**Examples:**
+
+Tag names are sanitized to lowercase slug format (spaces → dashes, special chars removed):
+- `#my-important-label` stays as-is
+- `#MyImportantLabel` becomes `#myimportantlabel`
+- Spaces are not supported in Obsidian tags anyway (they're markdown syntax)
+
+When a label is created in Vikunja from a tag, the label title is title-cased:
+- `#urgent` → Vikunja label "Urgent"
+- `#high-priority` → Vikunja label "High Priority"
+- `#team-review` → Vikunja label "Team Review"
+
 ---
 
 ## Tracking IDs

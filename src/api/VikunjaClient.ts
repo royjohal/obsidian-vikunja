@@ -264,6 +264,21 @@ export class VikunjaClient {
   }
 
   /**
+   * Create a new label.
+   * @param label - Label data (title, hex_color, description)
+   */
+  async createLabel(label: {
+    title: string;
+    hex_color: string;
+    description: string;
+  }): Promise<VikunjaLabel> {
+    return this.request<VikunjaLabel>("/labels", {
+      method: "PUT",
+      body: JSON.stringify(label),
+    });
+  }
+
+  /**
    * Add a label to a task.
    * @param taskId  - The task to label
    * @param labelId - The label to apply

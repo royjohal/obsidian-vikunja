@@ -27,6 +27,7 @@ import type {
   SyncResult,
   VikunjaTask,
   VikunjaProject,
+  VikunjaLabel,
 } from "../types";
 import { VIKUNJA_NULL_DATE } from "../types";
 import { TaskParser } from "./TaskParser";
@@ -44,6 +45,12 @@ export class SyncEngine {
    * when resolving project names from frontmatter across many files.
    */
   private cachedProjects: VikunjaProject[] | null = null;
+
+  /**
+   * Label list cache — populated once per sync run to avoid repeated API calls
+   * when resolving tag names to label IDs across many tasks.
+   */
+  private cachedLabels: VikunjaLabel[] | null = null;
 
   constructor(app: App, client: VikunjaClient, settings: VikunjaPluginSettings) {
     this.app = app;
@@ -69,8 +76,9 @@ export class SyncEngine {
       timestamp: new Date(),
     };
 
-    // Reset project cache so we get a fresh list for this run
+    // Reset project and label caches so we get fresh lists for this run
     this.cachedProjects = null;
+    this.cachedLabels = null;
 
     try {
       // Step 1: Ensure every Vikunja project has a markdown file in the vault.
@@ -375,6 +383,22 @@ export class SyncEngine {
         // Write vikunjaId back to the file
         task.vikunjaId = created.id;
         await this.writeTaskToFile(task);
+
+        // Sync labels from tags
+        if (task.tagNames && task.tagNames.length > 0) {
+          try {
+            const labels = await this.resolveOrCreateLabels(task.tagNames);
+            for (const label of labels) {
+              await this.client.addLabelToTask(created.id, label.id);
+            }
+            task.labels = labels;
+            // Write updated task with labels back to file
+            await this.writeTaskToFile(task);
+          } catch (err) {
+            result.errors.push(`Failed to sync labels for "${task.title}": ${String(err)}`);
+          }
+        }
+
         result.created++;
       } catch (err) {
         result.errors.push(`Failed to create task "${task.title}": ${String(err)}`);
@@ -429,13 +453,19 @@ export class SyncEngine {
       const localDueDate  = task.dueDate  ? new Date(task.dueDate).toISOString()  : null;
       const localStartDate = task.startDate ? new Date(task.startDate).toISOString() : null;
 
+      // Resolve local labels from tags for comparison
+      const localLabels = task.tagNames && task.tagNames.length > 0
+        ? await this.resolveOrCreateLabels(task.tagNames)
+        : [];
+
       const nothingChanged =
         task.title    === remote.title &&
         task.done     === remote.done  &&
         task.priority === remote.priority &&
         localRepeatAfter === (remote.repeat_after ?? 0) &&
         (localDueDate  ?? VIKUNJA_NULL_DATE) === (remote.due_date   ?? VIKUNJA_NULL_DATE) &&
-        (localStartDate ?? VIKUNJA_NULL_DATE) === (remote.start_date ?? VIKUNJA_NULL_DATE);
+        (localStartDate ?? VIKUNJA_NULL_DATE) === (remote.start_date ?? VIKUNJA_NULL_DATE) &&
+        this.labelArraysEqual(localLabels, remote.labels || []);
 
       if (nothingChanged) continue;
 
@@ -471,6 +501,30 @@ export class SyncEngine {
           priority:     task.priority > 0 ? task.priority : undefined,
           repeat_after: localRepeatAfter || undefined,
         });
+
+        // Sync label changes if needed
+        const remoteLabels = remote.labels || [];
+        if (!this.labelArraysEqual(localLabels, remoteLabels)) {
+          try {
+            // Remove labels that are in remote but not in local
+            for (const label of remoteLabels) {
+              if (!localLabels.find((l) => l.id === label.id)) {
+                await this.client.removeLabelFromTask(task.vikunjaId!, label.id);
+              }
+            }
+            // Add labels that are in local but not in remote
+            for (const label of localLabels) {
+              if (!remoteLabels.find((l) => l.id === label.id)) {
+                await this.client.addLabelToTask(task.vikunjaId!, label.id);
+              }
+            }
+          } catch (err) {
+            result.errors.push(
+              `Failed to sync labels for task "${task.title}": ${String(err)}`
+            );
+          }
+        }
+
         result.updated++;
       } catch (err) {
         result.errors.push(`Failed to update task "${task.title}": ${String(err)}`);
@@ -543,7 +597,7 @@ export class SyncEngine {
         const local = localById.get(remote.id);
 
         if (local) {
-          // Task already in Obsidian — update done/title if remote changed
+          // Task already in Obsidian — update done/title/labels if remote changed
           let changed = false;
           if (remote.done !== local.done) {
             local.done = remote.done;
@@ -554,6 +608,12 @@ export class SyncEngine {
             local.title = remote.title;
             changed = true;
             result.updated++;
+          }
+          // Sync labels from remote
+          if (remote.labels.length !== local.labels.length ||
+              !this.labelArraysEqual(remote.labels, local.labels)) {
+            local.labels = remote.labels;
+            changed = true;
           }
           if (changed) await this.writeTaskToFile(local);
         } else {
@@ -604,6 +664,12 @@ export class SyncEngine {
         local.title = remote.title;
         changed = true;
         result.updated++;
+      }
+      // Sync labels from remote
+      if (remote.labels.length !== local.labels.length ||
+          !this.labelArraysEqual(remote.labels, local.labels)) {
+        local.labels = remote.labels;
+        changed = true;
       }
       if (changed) await this.writeTaskToFile(local);
     }
@@ -784,6 +850,18 @@ export class SyncEngine {
   }
 
   /**
+   * Fetch the label list, using a per-run in-memory cache so that tag-based
+   * label resolution across many tasks only results in a single API call per
+   * sync run.
+   */
+  private async getCachedLabels(): Promise<VikunjaLabel[]> {
+    if (!this.cachedLabels) {
+      this.cachedLabels = await this.client.getLabels();
+    }
+    return this.cachedLabels;
+  }
+
+  /**
    * Resolve the explicit project ID declared in a file's frontmatter.
    *
    * Supports two frontmatter properties:
@@ -835,6 +913,53 @@ export class SyncEngine {
     return this.settings.excludedFolders.some((folder) =>
       path.startsWith(folder.trim() + "/")
     );
+  }
+
+  /**
+   * Resolve tag names to Vikunja labels, creating new labels as needed.
+   *
+   * @param tagNames - Array of tag names (e.g., ["work", "urgent"])
+   * @returns Array of resolved VikunjaLabel objects
+   */
+  private async resolveOrCreateLabels(tagNames: string[]): Promise<VikunjaLabel[]> {
+    if (!tagNames || tagNames.length === 0) return [];
+
+    const allLabels = await this.getCachedLabels();
+    const resolved: VikunjaLabel[] = [];
+
+    for (const tagName of tagNames) {
+      // Try to find matching label by title (case-insensitive)
+      const existing = allLabels.find(
+        (l) => l.title.toLowerCase() === tagName.toLowerCase()
+      );
+
+      if (existing) {
+        resolved.push(existing);
+      } else {
+        // Auto-create new label with random color
+        const newLabel = await this.client.createLabel({
+          title: TaskParser.slugToLabel(tagName), // "my-tag" → "My Tag"
+          hex_color: TaskParser.generateRandomColor(),
+          description: "",
+        });
+        resolved.push(newLabel);
+        // Update cache so subsequent tags don't re-create it
+        this.cachedLabels!.push(newLabel);
+      }
+    }
+
+    return resolved;
+  }
+
+  /**
+   * Compare two arrays of labels for equality.
+   * Returns true if both arrays contain the same labels (by ID).
+   */
+  private labelArraysEqual(a: VikunjaLabel[], b: VikunjaLabel[]): boolean {
+    if (a.length !== b.length) return false;
+    const aIds = a.map((l) => l.id).sort((x, y) => x - y);
+    const bIds = b.map((l) => l.id).sort((x, y) => x - y);
+    return aIds.every((id, i) => id === bIds[i]);
   }
 
   /**

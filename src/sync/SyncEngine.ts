@@ -98,9 +98,12 @@ export class SyncEngine {
       //         and import remote-only tasks into their bound files
       await this.pullRemoteChanges(obsidianTasks, fileProjectMap, result);
 
-      // Step 6: Delete orphaned tasks — if a task was deleted from Obsidian
-      // (removed from an auto-created project file), delete it from Vikunja too
-      await this.deleteOrphanedTasks(obsidianTasks, result);
+      // Step 6: Delete orphaned tasks — DISABLED FOR NOW
+      // The current implementation is too aggressive and deletes tasks that exist
+      // in other files (e.g., daily notes with default project binding).
+      // This needs a more sophisticated approach that tracks previous state.
+      // TODO: Re-enable with proper state tracking in v0.2
+      // await this.deleteOrphanedTasks(obsidianTasks, result);
 
     } catch (err) {
       result.errors.push(String(err));
